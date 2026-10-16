@@ -1,0 +1,6 @@
+{
+  "name": "Overhead.Tests",
+  "references": ["Overhead.Runtime"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

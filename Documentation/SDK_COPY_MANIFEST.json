@@ -1,0 +1,20 @@
+[
+  {
+    "source": "C:\\Program Files\\Azure Kinect SDK v1.4.2\\sdk\\netstandard2.0\\release\\Microsoft.Azure.Kinect.Sensor.dll",
+    "destination": "Assets/Plugins/AzureKinect/Managed/Microsoft.Azure.Kinect.Sensor.dll",
+    "sha256": "B23F4D5848D42226F41CA1D54F24B2B1F4A67F93992B37B0A4CDD2ADE9983A45",
+    "bytes": 72112
+  },
+  {
+    "source": "C:\\Program Files\\Azure Kinect SDK v1.4.2\\sdk\\windows-desktop\\amd64\\release\\bin\\k4a.dll",
+    "destination": "Assets/Plugins/AzureKinect/x86_64/k4a.dll",
+    "sha256": "F54CAC9C1028C93DA94B606C3DF82EA162DE3798A740F08A4AD48283688932AA",
+    "bytes": 634288
+  },
+  {
+    "source": "C:\\Program Files\\Azure Kinect SDK v1.4.2\\sdk\\windows-desktop\\amd64\\release\\bin\\depthengine_2_0.dll",
+    "destination": "Assets/Plugins/AzureKinect/x86_64/depthengine_2_0.dll",
+    "sha256": "34E514FAB4186218AAF3D2875AF434B610EB8786ACE952B69B10C2B7FE125989",
+    "bytes": 407472
+  }
+]

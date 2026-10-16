@@ -1,0 +1,6 @@
+{
+  "name": "Overhead.Runtime",
+  "rootNamespace": "Naispo.Overhead",
+  "references": ["Unity.InputSystem"],
+  "autoReferenced": true
+}
