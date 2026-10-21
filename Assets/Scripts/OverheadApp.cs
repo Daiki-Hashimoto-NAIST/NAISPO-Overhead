@@ -10,22 +10,55 @@ namespace Naispo.Overhead
         readonly List<Token> tokens=new List<Token>();
         readonly Color ink=new Color(0.89f,0.94f,0.98f), muted=new Color(0.5f,0.62f,0.72f);
         readonly Color coral=new Color(1,0.39f,0.32f), cyan=new Color(0.18f,0.81f,0.94f);
+        // Use one crop for all expressions of each character, with a little outline padding.
+        readonly Monster leftMonster=new Monster("Left",new Rect(177,232,901,866));
+        readonly Monster rightMonster=new Monster("Right",new Rect(190,134,875,1031));
         OverheadDepthSource source;
-        Texture2D dot, preview;
+        Texture2D dot, preview, strawberry, fish;
         Color32[] previewPixels;
         GUIStyle label, button;
         bool live, table, mirror=true, invert, ready, hasAngle;
         float minHeight=300,maxHeight=2200,angle,targetAngle,spawnTimer,feedbackTime,lastFrameAt=-100;
         int score,misses,streak,spawnCount;
-        string feedback="Rotate the gate. Match the color.";
-        const float PivotX=505,PivotY=530,HalfArm=170;
+        string feedback="Strawberries left. Fish right.";
+        const float PivotX=505,PivotY=530,HalfArm=170,FoodSize=56;
         static readonly Vector2 Pivot=new Vector2(PivotX,PivotY);
-        class Token { public Vector2 Position,Previous,Velocity; public bool Blue; public float Cooldown; }
+        static readonly Rect StrawberryCrop=new Rect(209,105,835,1051),FishCrop=new Rect(104,310,1062,646);
+        class Token
+        {
+            public Vector2 Position,Previous,Velocity;
+            public bool IsFish;
+            public float Cooldown,Rotation,SpinSpeed;
+        }
+        sealed class Monster
+        {
+            public readonly string Side;
+            public readonly Rect Crop;
+            public readonly Texture2D[] Faces=new Texture2D[3];
+            public int Expression;
+            public float ReactedAt=-100;
+            public Monster(string side,Rect crop) { Side=side;Crop=crop; }
+            public void Load()
+            {
+                string[] names={"Normal","Satisfied","Confused"};
+                for(int i=0;i<names.Length;i++)
+                {
+                    Faces[i]=Resources.Load<Texture2D>("Monsters/"+Side+names[i]);
+                    if(Faces[i]==null) Debug.LogError("Missing monster texture: "+Side+names[i]);
+                }
+            }
+            public void React(bool correct) { Expression=correct ? 1 : 2;ReactedAt=Time.time; }
+            public void Reset() { Expression=0;ReactedAt=-100; }
+        }
 
         void Awake()
         {
             Application.targetFrameRate=60;
             source=GetComponent<OverheadDepthSource>();
+            leftMonster.Load();rightMonster.Load();
+            strawberry=Resources.Load<Texture2D>("Food/Strawberry");
+            fish=Resources.Load<Texture2D>("Food/Fish");
+            if(strawberry==null||fish==null)Debug.LogError("Missing food texture: Strawberry or Fish");
             dot=new Texture2D(64,64,TextureFormat.RGBA32,false);
             for(int y=0;y<64;y++)for(int x=0;x<64;x++)
             {
@@ -73,8 +106,11 @@ namespace Naispo.Overhead
             if(spawnTimer<=0 && tokens.Count<7)
             {
                 spawnTimer=1.8f;
-                bool blue=spawnCount++%2==1;
-                tokens.Add(new Token { Position=new Vector2(PivotX+Random.Range(-75f,75f),185),Velocity=new Vector2(0,85),Blue=blue });
+                bool isFish=spawnCount++%2==1;
+                tokens.Add(new Token {
+                    Position=new Vector2(PivotX+Random.Range(-75f,75f),185),Velocity=new Vector2(0,85),IsFish=isFish,
+                    Rotation=Random.Range(-35f,35f),SpinSpeed=Random.Range(50f,100f)*(Random.value<0.5f ? -1 : 1)
+                });
             }
             for(int i=tokens.Count-1;i>=0;i--)
             {
@@ -82,21 +118,29 @@ namespace Naispo.Overhead
                 token.Previous=token.Position;
                 token.Velocity.y+=170*dt;
                 token.Position+=token.Velocity*dt;
+                token.Rotation=Mathf.Repeat(token.Rotation+token.SpinSpeed*dt,360);
+                token.SpinSpeed*=Mathf.Exp(-0.18f*dt);
                 token.Cooldown-=dt;
-                if(token.Cooldown<=0 && SorterRules.CrossesGate(token.Previous,token.Position,Pivot,angle,HalfArm,13))
+                // Keep a stable circular contact area while the illustration turns.
+                float radius=FoodSize/2;
+                if(token.Cooldown<=0 && SorterRules.CrossesGate(token.Previous,token.Position,Pivot,angle,HalfArm,radius))
                 {
                     float rad=(Mathf.Repeat(angle+90,180)-90)*Mathf.Deg2Rad;
                     Vector2 normal=new Vector2(Mathf.Sin(rad),-Mathf.Cos(rad));
                     token.Position=token.Previous+normal*4;
                     token.Velocity=SorterRules.LaunchVelocity(angle);
+                    float spinDirection=Mathf.Abs(token.Velocity.x)>1 ? Mathf.Sign(token.Velocity.x) : Mathf.Sign(token.SpinSpeed);
+                    token.SpinSpeed=spinDirection*(160+Mathf.Abs(token.Velocity.x)*0.45f);
                     token.Cooldown=0.35f;
                 }
                 int exit=SorterRules.ExitSide(token.Position);
                 if(exit!=0)
                 {
-                    bool correct=(exit==1&&!token.Blue)||(exit==2&&token.Blue);
-                    if(correct) { score++; streak++; feedback="SORTED  +1"; }
-                    else { misses++; streak=0; feedback=exit==3 ? "Dropped. Try a bigger tilt." : "Wrong bin. Follow the color."; }
+                    bool correct=(exit==1&&!token.IsFish)||(exit==2&&token.IsFish);
+                    if(correct) { score++; streak++; feedback="YUM!  +1"; }
+                    else { misses++; streak=0; feedback=exit==3 ? "Dropped. Try a bigger tilt." : "Oops! Try the other monster."; }
+                    if(exit==1)leftMonster.React(correct);
+                    if(exit==2)rightMonster.React(correct);
                     feedbackTime=Time.time;
                     tokens.RemoveAt(i);
                 }
@@ -120,7 +164,12 @@ namespace Naispo.Overhead
             }
             preview.SetPixels32(previewPixels);preview.Apply(false,false);
         }
-        void ResetRound() { tokens.Clear();score=misses=streak=spawnCount=0;spawnTimer=1;feedback="Rotate the gate. Match the color."; }
+        void ResetRound()
+        {
+            tokens.Clear();score=misses=streak=spawnCount=0;spawnTimer=1;
+            leftMonster.Reset();rightMonster.Reset();
+            feedback="Strawberries left. Fish right.";feedbackTime=Time.time;
+        }
         void Connect()
         {
             live=true;ready=false;hasAngle=false;lastFrameAt=-100;
@@ -142,15 +191,17 @@ namespace Naispo.Overhead
             GUI.matrix=Matrix4x4.Scale(new Vector3(Screen.width/1440f,Screen.height/900f,1));
             Fill(new Rect(0,0,1440,900),new Color(0.025f,0.04f,0.07f));
             Text(new Rect(40,25,900,28),"NAISPO  /  OVERHEAD LAB",16,cyan);
-            Text(new Rect(40,57,800,58),"Turn. Catch. Sort.",40,ink);
+            Text(new Rect(40,57,800,58),"Turn. Catch. Feed!",40,ink);
             Text(new Rect(1030,48,340,28),live ? "LIVE DEPTH  /  AZURE KINECT" : "DEMO  /  NO SENSOR NEEDED",16,live ? cyan : coral);
             Fill(new Rect(40,140,930,690),new Color(0.045f,0.065f,0.10f));
-            // The lanes and target bins remain visible while depth calibration is paused.
+            // Keep the destinations visible while depth calibration is paused.
             for(int i=0;i<8;i++)Fill(new Rect(90+i*115,165,1,640),new Color(0.07f,0.1f,0.14f));
-            Fill(new Rect(56,320,146,490),new Color(0.23f,0.09f,0.10f));
-            Fill(new Rect(808,320,146,490),new Color(0.04f,0.20f,0.25f));
-            Text(new Rect(75,735,120,40),"CORAL",22,coral);
-            Text(new Rect(829,735,120,40),"BLUE",22,cyan);
+            Fill(new Rect(56,320,146,490),new Color(0.14f,0.075f,0.09f));
+            Fill(new Rect(808,320,146,490),new Color(0.035f,0.12f,0.16f));
+            DrawMonster(leftMonster,165,coral);
+            DrawMonster(rightMonster,845,cyan);
+            DrawFavorite(165,false,coral);
+            DrawFavorite(845,true,cyan);
             Text(new Rect(70,165,200,34),"SORTED  "+score,23,ink);
             Text(new Rect(70,203,280,30),$"MISSED  {misses}    STREAK  {streak}",15,muted);
             Text(new Rect(650,165,290,30),ready ? "GATE ACTIVE" : "PAUSED / WAITING FOR AXIS",15,ready ? cyan : coral);
@@ -162,13 +213,55 @@ namespace Naispo.Overhead
             Circle(Pivot-axis*HalfArm,13,coral);Circle(Pivot+axis*HalfArm,13,cyan);
             foreach(var token in tokens)
             {
-                Circle(token.Position,20,new Color(0.12f,0.18f,0.24f));
-                Circle(token.Position,13,token.Blue ? cyan : coral);
+                DrawFood(token.Position,token.IsFish,FoodSize,token.Rotation);
             }
-            Text(new Rect(280,760,490,38),!ready ? "Clear the view to calibrate, then spread your arms." : Time.time-feedbackTime<2.5f ? feedback : "Tilt left for coral. Tilt right for blue.",17,ink);
+            Text(new Rect(280,760,490,38),!ready ? "Clear the view to calibrate, then spread your arms." : Time.time-feedbackTime<2.5f ? feedback : "Strawberries left. Fish right.",17,ink);
             Text(new Rect(40,849,940,30),live ? "The gate follows the axis of your arms. Lost tracking pauses the game." : "A / D or arrow keys to rotate. You can also hold and drag inside the game.",16,muted);
             DrawControlPanel();
             GUI.matrix=old;
+        }
+        void DrawFavorite(float centerX,bool isFish,Color accent)
+        {
+            Fill(new Rect(centerX-60,740,120,70),new Color(accent.r,accent.g,accent.b,0.12f));
+            DrawFood(new Vector2(centerX,775),isFish,FoodSize);
+        }
+        void DrawFood(Vector2 center,bool isFish,float size,float rotation=0)
+        {
+            Texture2D texture=isFish ? fish : strawberry;
+            if(texture==null) { Circle(center,size/2,isFish ? cyan : coral);return; }
+            Rect crop=isFish ? FishCrop : StrawberryCrop;
+            float scale=size/Mathf.Max(crop.width,crop.height);
+            var rect=new Rect(center.x-crop.width*scale/2,center.y-crop.height*scale/2,crop.width*scale,crop.height*scale);
+            var uv=new Rect(crop.x/texture.width,1-crop.yMax/texture.height,crop.width/texture.width,crop.height/texture.height);
+            Color previous=GUI.color;
+            Matrix4x4 previousMatrix=GUI.matrix;
+            GUI.color=Color.white;
+            GUIUtility.RotateAroundPivot(rotation,center);
+            GUI.DrawTextureWithTexCoords(rect,texture,uv,true);
+            GUI.matrix=previousMatrix;
+            GUI.color=previous;
+        }
+        void DrawMonster(Monster monster,float centerX,Color accent)
+        {
+            float elapsed=Time.time-monster.ReactedAt;
+            int expression=elapsed<1.6f ? monster.Expression : 0;
+            Texture2D face=monster.Faces[expression];
+            if(face==null)face=monster.Faces[0];
+            if(face==null)return;
+            float motion=Mathf.Clamp01(1-elapsed/0.6f);
+            float bounce=expression==1 ? Mathf.Abs(Mathf.Sin(elapsed*14))*12*motion : 0;
+            float wiggle=expression==2 ? Mathf.Sin(elapsed*24)*5*motion : 0;
+            Color previous=GUI.color;
+            GUI.color=new Color(accent.r,accent.g,accent.b,0.14f);
+            GUI.DrawTexture(new Rect(centerX-108,710,216,30),dot);
+            GUI.color=Color.white;
+            Rect crop=monster.Crop;
+            const float width=248;
+            float height=width*crop.height/crop.width;
+            // Texture UVs start at the bottom; source crop coordinates start at the top.
+            var uv=new Rect(crop.x/face.width,1-crop.yMax/face.height,crop.width/face.width,crop.height/face.height);
+            GUI.DrawTextureWithTexCoords(new Rect(centerX-width/2+wiggle,730-height-bounce,width,height),face,uv,true);
+            GUI.color=previous;
         }
         void DrawControlPanel()
         {
