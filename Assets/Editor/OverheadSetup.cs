@@ -45,6 +45,10 @@ public static class OverheadSetup
             locationPathName="Builds/Windows/NAISPO-Overhead.exe",options=BuildOptions.None
         });
         if(report.summary.result!=BuildResult.Succeeded) throw new Exception("Overhead build failed");
+        string licenses="Builds/Windows/Licenses";
+        System.IO.Directory.CreateDirectory(licenses);
+        foreach(string path in System.IO.Directory.GetFiles("Documentation/Licenses"))
+            System.IO.File.Copy(path,System.IO.Path.Combine(licenses,System.IO.Path.GetFileName(path)),true);
         Debug.Log("OVERHEAD_BUILD_OK");
     }
 }
