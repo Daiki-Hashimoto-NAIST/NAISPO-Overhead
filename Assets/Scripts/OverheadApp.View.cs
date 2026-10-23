@@ -7,7 +7,7 @@ namespace Naispo.Overhead
         static Color Rgb(int value,float alpha=1) => new Color(((value>>16)&255)/255f,((value>>8)&255)/255f,(value&255)/255f,alpha);
         readonly Color ink=Rgb(0x59433E),muted=Rgb(0x847B67),coral=Rgb(0xEF8875),cyan=Rgb(0x66BABB);
         readonly Color cream=Rgb(0xFFFDF3),outline=Rgb(0xDFD5B7),leaf=Rgb(0x729C74);
-        Texture2D paper;
+        Texture2D paper,heartIcon,tangleIcon,sparkleIcon;
         Font roundFont;
         GUIStyle label,button,sliderThumb;
 
@@ -19,6 +19,9 @@ namespace Naispo.Overhead
             for(int y=0;y<128;y++)for(int x=0;x<8;x++)
                 paper.SetPixel(x,y,Color.Lerp(Rgb(0xEAF3DC),Rgb(0xFFF5DE),y/127f));
             paper.Apply();
+            heartIcon=GameIconArt.CreateHeart();
+            tangleIcon=GameIconArt.CreateTangle();
+            sparkleIcon=GameIconArt.CreateSparkle();
         }
         void Styles()
         {
@@ -42,7 +45,6 @@ namespace Naispo.Overhead
             GUI.matrix=canvas*Matrix4x4.Translate(new Vector3(GameLayout.StageOffsetX,0,0));
             DrawPlayfield();
             GUI.matrix=canvas;
-            DrawFooter();
             if(settingsOpen)DrawSettings();
             else if(paused)DrawPause();
             GUI.matrix=original;
@@ -58,10 +60,9 @@ namespace Naispo.Overhead
             Cloud(124,263,0.7f,Rgb(0xFFFCF0));
             Cloud(1310,230,0.85f,Rgb(0xFFFCF0));
             Cloud(1200,373,0.45f,Rgb(0xF8FAEB));
-            // Quiet decorative plants stay outside the play area.
-            Plant(98,748,1.1f);Plant(1317,734,1.2f);Plant(142,801,0.65f);Plant(1260,793,0.65f);
-            Flower(76,692,1.0f,Rgb(0xE9AF94));Flower(1372,678,0.85f,Rgb(0xEFCA73));
-            Flower(170,766,0.68f,Rgb(0xE6B9BC));Flower(1283,761,0.65f,Rgb(0xFFF7DD));
+            // Every stem belongs to a complete flower, with leaves joined below its head.
+            Flower(91,698,1.05f,Rgb(0xE9AF94));Flower(1346,684,1.05f,Rgb(0xEFCA73));
+            Flower(158,769,0.7f,Rgb(0xE6B9BC));Flower(1278,759,0.75f,Rgb(0xFFF7DD));
             for(int i=0;i<6;i++)
             {
                 float x=70+i*47;
@@ -71,24 +72,21 @@ namespace Naispo.Overhead
         }
         void DrawHeader()
         {
-            Text(new Rect(65,27,500,28),"NAISPO の あそびば",16,muted);
-            Text(new Rect(59,60,820,67),"もぐもぐ モンスター",49,ink);
-            Text(new Rect(66,128,760,30),"ぼうを かたむけて、ごはんを とどけよう",19,muted);
-            Card(new Rect(941,40,215,112),cream,24);
-            Sparkle(new Vector2(980,100),21,Rgb(0xE6B450));
-            Text(new Rect(1010,53,130,26),"ごちそう",16,muted,TextAnchor.MiddleLeft);
-            Text(new Rect(1008,80,133,55),score+" こ",36,ink,TextAnchor.MiddleLeft);
-            if(SoftButton(new Rect(1180,46,116,49),"ひとやすみ",cream)) { paused=true;draggingGate=false; }
-            if(SoftButton(new Rect(1308,46,91,49),"せってい",cream)) { settingsOpen=true;draggingGate=false; }
-            Text(new Rect(1180,114,219,28),streak>0 ? $"{streak} れんぞく！" : "ゆっくり あそぼう",18,leaf,TextAnchor.MiddleCenter);
+            Text(new Rect(64,53,180,35),"NAISPO",22,Rgb(0x9A967D));
+            Card(new Rect(960,46,196,64),cream,22);
+            float celebrationPulse=Celebrating ? Mathf.Sin((playTime-celebrationAt)*6)*3 : 0;
+            Sparkle(new Vector2(997,78),18+celebrationPulse,Rgb(0xE6B450));
+            Text(new Rect(1032,50,108,56),score.ToString(),32,ink,TextAnchor.MiddleLeft);
+            if(SoftButton(new Rect(1180,46,116,64),"ひとやすみ",cream)) { paused=true;draggingGate=false; }
+            if(SoftButton(new Rect(1308,46,91,64),"せってい",cream)) { settingsOpen=true;draggingGate=false; }
         }
         void DrawPlayfield()
         {
-            // A small cloud is the source of the food; game coordinates remain unchanged.
-            Cloud(PivotX,209,1.08f,cream);
-            Circle(new Vector2(PivotX-22,202),3,Rgb(0xB2AA98));
-            Circle(new Vector2(PivotX+22,202),3,Rgb(0xB2AA98));
-            Rounded(new Rect(PivotX-9,213,18,5),2,Rgb(0xD6C4AA));
+            // Stretch the cloud to cover all three food drop regions.
+            Cloud(PivotX-45,209,1.08f,cream);
+            Cloud(PivotX+45,209,1.08f,cream);
+            DrawCloudFace();
+            DrawDropWarning();
             Oval(new Rect(20,704,290,70),Rgb(0xECCAB2));
             Oval(new Rect(700,704,290,70),Rgb(0xBFDAD0));
             DrawMonster(leftMonster,165,coral,false);
@@ -107,50 +105,20 @@ namespace Naispo.Overhead
             Circle(Pivot+new Vector2(0,4),28,Rgb(0xBA9C76));
             Circle(Pivot,26,cream);Circle(Pivot,17,Rgb(0xE9B95F));
             Circle(Pivot,6,Rgb(0xFFF1C5));
-            foreach(var token in tokens)DrawFood(token.Position,token.IsFish,FoodSize,token.Rotation);
-            string message=!ready ? "りょうてを ひろげてみよう" : playTime-feedbackTime<2.5f ? feedback : "いちごは ひだり。さかなは みぎ。";
-            Card(new Rect(306,713,398,72),cream,28);
-            Text(new Rect(322,726,366,43),message,21,ink,TextAnchor.MiddleCenter);
-            if(!ready)
+            foreach(var token in tokens)DrawAnimatedFood(token);
+            DrawFoodFeedback();
+            if(!ready&&!Celebrating)
             {
-                Rounded(new Rect(350,353,310,67),24,cream);
-                Text(new Rect(368,364,274,43),analyzer.CalibrationFramesRemaining>0 ? "じゅんび しているよ…" : "みつけるまで まってね",21,muted,TextAnchor.MiddleCenter);
+                string prompt=source.Starting||(!front&&analyzer.CalibrationFramesRemaining>0)
+                    ? "じゅんび しているよ…" : front ? FrontPrompt() : "りょうてを ひろげてみよう";
+                Rounded(new Rect(315,353,380,67),24,cream);
+                Text(new Rect(330,364,350,43),prompt,21,muted,TextAnchor.MiddleCenter);
             }
         }
         void DrawFavorite(float centerX,bool isFish)
         {
-            Card(new Rect(centerX-100,748,200,64),cream,28);
-            DrawFood(new Vector2(centerX-53,778),isFish,45);
-            Text(new Rect(centerX-17,758,104,40),isFish ? "さかな" : "いちご",22,ink,TextAnchor.MiddleCenter);
-        }
-        void DrawMonster(Monster monster,float centerX,Color accent,bool isFish)
-        {
-            float elapsed=playTime-monster.ReactedAt;
-            int expression=elapsed<1.6f ? monster.Expression : 0;
-            Texture2D face=monster.Faces[expression];
-            if(face==null)face=monster.Faces[0];
-            if(face==null)return;
-            float motion=Mathf.Clamp01(1-elapsed/0.6f);
-            float bounce=expression==1 ? Mathf.Abs(Mathf.Sin(elapsed*14))*12*motion : 0;
-            float wiggle=expression==2 ? Mathf.Sin(elapsed*24)*5*motion : 0;
-            float idle=Mathf.Sin(playTime*2+(isFish ? 1.5f : 0))*2;
-            Oval(new Rect(centerX-107,717,214,26),Rgb(0xA99B7D,0.18f));
-            Rect crop=monster.Crop;
-            const float width=248;
-            float height=width*crop.height/crop.width;
-            Rect uv=new Rect(crop.x/face.width,1-crop.yMax/face.height,crop.width/face.width,crop.height/face.height);
-            GUI.DrawTextureWithTexCoords(new Rect(centerX-width/2+wiggle,730-height-bounce+idle,width,height),face,uv,true);
-            float bubbleY=730-height-75;
-            Rounded(new Rect(centerX-103,bubbleY,206,53),24,cream);
-            Circle(new Vector2(centerX+30,bubbleY+52),9,cream);
-            string speech=expression==1 ? "おいし〜い！" : expression==2 ? "あれれ？" : isFish ? "さかなが すき！" : "いちごが すき！";
-            Text(new Rect(centerX-97,bubbleY+6,194,38),speech,21,expression==2 ? muted : ink,TextAnchor.MiddleCenter);
-            if(expression==1)
-            {
-                float pulse=1+Mathf.Sin(elapsed*9)*0.15f;
-                Sparkle(new Vector2(centerX-132,730-height+70),13*pulse,Rgb(0xE8B94F));
-                Sparkle(new Vector2(centerX+133,730-height+33),10*pulse,Rgb(0xE8B94F));
-            }
+            Oval(new Rect(centerX-49,755,98,59),cream);
+            DrawFood(new Vector2(centerX,783),isFish,49);
         }
         void DrawFood(Vector2 center,bool isFish,float size,float rotation=0)
         {
@@ -165,18 +133,15 @@ namespace Naispo.Overhead
             GUI.DrawTextureWithTexCoords(rect,texture,uv,true);
             GUI.matrix=matrix;GUI.color=old;
         }
-        void DrawFooter()
-        {
-            Rounded(new Rect(43,838,1354,43),20,Rgb(0xFFF9E9));
-            Text(new Rect(66,843,920,33),live ? "りょうてを ひろげて、からだを ゆっくり まわそう" : "マウスを おしたまま、ひだり・みぎに うごかそう",18,muted,TextAnchor.MiddleLeft);
-            Text(new Rect(1020,843,351,33),live ? "からだで あそんでいるよ" : "A / D ・ ← / → でも OK",16,leaf,TextAnchor.MiddleRight);
-        }
+        string ControlHint() => live
+            ? front ? "りょうてを はなして、\nてを じょうげに うごかそう" : "りょうてを ひろげて、\nからだを ゆっくり まわそう"
+            : "マウスを おしたまま、ひだり・みぎへ\nA / D ・ ← / → でも あそべるよ";
         void DrawPause()
         {
             Fill(new Rect(0,0,1440,900),Rgb(0x4C5145,0.34f));
             Card(new Rect(470,290,500,310),cream,36);
             Text(new Rect(500,325,440,64),"ちょっと ひとやすみ",31,ink,TextAnchor.MiddleCenter);
-            Text(new Rect(500,399,440,38),"じゅんびが できたら、つづけよう",19,muted,TextAnchor.MiddleCenter);
+            Text(new Rect(500,397,440,68),ControlHint(),19,muted,TextAnchor.MiddleCenter);
             if(SoftButton(new Rect(577,481,286,61),"つづける",Rgb(0xE8BE6C)))paused=false;
         }
         void DrawSettings()
@@ -184,11 +149,10 @@ namespace Naispo.Overhead
             Fill(new Rect(0,0,1440,900),Rgb(0x4C5145,0.34f));
             Card(new Rect(260,88,920,740),cream,32);
             Text(new Rect(298,113,610,52),"あそびの せってい",30,ink);
-            Text(new Rect(300,171,700,33),"Kinect をつなぐと、からだの向きで あそべます。",18,muted);
-            if(SoftButton(new Rect(1050,113,90,48),"とじる",Rgb(0xF1E7D1))) { settingsOpen=false;draggingGate=false; }
-            if(SoftButton(new Rect(300,225,182,49),"マウス・キー",!live ? Rgb(0xD6E7CD) : Rgb(0xF3EAD7)))
+            if(SoftButton(new Rect(992,113,126,48),sounds.Muted ? "おと：オフ" : "おと：オン",Rgb(0xF1E7D1)))sounds.Muted=!sounds.Muted;
+            if(SoftButton(new Rect(300,213,182,45),"マウス・キー",!live ? Rgb(0xD6E7CD) : Rgb(0xF3EAD7)))
             { source.StopCapture();live=false;ready=true;targetAngle=0;ResetRound(); }
-            if(SoftButton(new Rect(495,225,182,49),"Kinect をつなぐ",live ? Rgb(0xD6E7CD) : Rgb(0xF3EAD7)))Connect();
+            if(SoftButton(new Rect(495,213,182,45),"Kinect をつなぐ",live ? Rgb(0xD6E7CD) : Rgb(0xF3EAD7)))Connect();
             Rect box=new Rect(300,292,377,246);
             Rounded(box,20,Rgb(0xE5E9DC));
             if(live&&preview!=null)
@@ -196,12 +160,19 @@ namespace Naispo.Overhead
                 Rect fitted=Fit(new Rect(312,304,353,222),preview.width,preview.height);
                 GUI.DrawTexture(fitted,preview);
                 var r=analyzer.Result;
-                if(r.Valid)
+                if(front&&handLine.Valid&&ready)
                 {
-                    float x=mirror ? preview.width-1-r.CenterX : r.CenterX;
+                    Vector2 left=PreviewPoint(frontPose.LeftPixel,fitted);
+                    Vector2 right=PreviewPoint(frontPose.RightPixel,fitted);
+                    Capsule(left,right,4,cream);
+                    Circle(left,9,coral);Circle(right,9,cyan);
+                }
+                else if(!front&&r.Valid)
+                {
+                    float x=previewMirrored ? preview.width-1-r.CenterX : r.CenterX;
                     Vector2 p=new Vector2(fitted.x+x/preview.width*fitted.width,fitted.y+r.CenterY/preview.height*fitted.height);
                     float a=r.AngleDegrees*Mathf.Deg2Rad;
-                    Vector2 d=new Vector2(Mathf.Cos(a)*(mirror ? -1 : 1),Mathf.Sin(a))*65;
+                    Vector2 d=new Vector2(Mathf.Cos(a)*(previewMirrored ? -1 : 1),Mathf.Sin(a))*65;
                     Capsule(p-d,p+d,3,cyan);Circle(p,5,cream);
                 }
             }
@@ -210,28 +181,63 @@ namespace Naispo.Overhead
                 Circle(new Vector2(488,374),22,leaf);
                 Capsule(new Vector2(488,401),new Vector2(488,458),12,leaf);
                 Capsule(new Vector2(405,416),new Vector2(572,416),12,leaf);
-                Text(new Rect(319,474,339,36),"ここに カメラの映像が うつります",16,muted,TextAnchor.MiddleCenter);
             }
-            string status=!live ? "マウス・キーで あそべます。\nKinect は、まわりを空けてからつないでね。" : !source.Running ? "Kinect を確認してください。\n電源・USB を確認して、つなぎ直してください。" : analyzer.CalibrationFramesRemaining>0 ? "背景をおぼえています。\nカメラの前から はなれて まってね。" : !analyzer.Calibrated ? "背景を読み取れませんでした。\nまわりを空けて、とりなおしてください。" : !ready ? "手をひろげてみよう。\n映らないときは、高さを調整してください。" : $"からだの向きが みえています。\n{source.Fps:F0} FPS / 認識の確かさ {analyzer.Result.Confidence:P0}";
+            string status=!live ? front ? "正面に立って、両手を 20 cm 以上\n離してから Kinect をつないでね。" : "人や手が映らないようにしてから\nKinect をつないでね。" : source.Starting ? "Kinect をじゅんびしています…" : !source.Running ? "Kinect をつなぎ直してください。" : front ? FrontStatus() : analyzer.CalibrationFramesRemaining>0 ? "背景をおぼえています。\nカメラの前から はなれて まってね。" : !analyzer.Calibrated ? "背景を読み取れませんでした。\nまわりを空けて、とりなおしてください。" : !ready ? "手をひろげてみよう。\n映らないときは、高さを調整してください。" : "からだの向きが みえています。";
             Text(new Rect(302,559,372,103),status,18,ink);
             if(live&&!source.Running)Text(new Rect(302,661,372,58),source.Status,12,muted);
-            Text(new Rect(724,224,398,35),"カメラで どこを みる？",21,ink);
-            if(SoftButton(new Rect(724,270,190,48),"ゆか・からだ",!table ? Rgb(0xD6E7CD) : Rgb(0xF3EAD7)))SetPreset(false);
-            if(SoftButton(new Rect(928,270,190,48),"つくえ・て",table ? Rgb(0xD6E7CD) : Rgb(0xF3EAD7)))SetPreset(true);
-            Text(new Rect(724,342,394,31),"背景からの高さ",18,ink);
-            minHeight=SoftSlider(new Rect(724,407,394,22),minHeight,10,1500);
-            Text(new Rect(724,378,394,26),$"ひくいところ  {minHeight:F0} mm",16,muted);
-            maxHeight=SoftSlider(new Rect(724,476,394,22),maxHeight,Mathf.Max(minHeight+10,50),2500);
-            Text(new Rect(724,447,394,26),$"たかいところ  {maxHeight:F0} mm",16,muted);
-            GUI.enabled=live&&source.Running;
-            if(SoftButton(new Rect(724,525,394,50),"背景を とりなおす",Rgb(0xE8BE6C)))Calibrate();
+            Text(new Rect(724,171,398,35),"カメラの むき",21,ink);
+            if(SoftButton(new Rect(724,213,190,45),"みおろし",!front ? Rgb(0xD6E7CD) : Rgb(0xF3EAD7)))SetCameraMode(false);
+            if(SoftButton(new Rect(928,213,190,45),"しょうめん",front ? Rgb(0xD6E7CD) : Rgb(0xF3EAD7)))SetCameraMode(true);
+            if(front)
+            {
+                Text(new Rect(724,342,394,31),"カメラから手までの距離",18,ink);
+                minDistance=SoftSlider(new Rect(724,407,394,22),minDistance,500,4000);
+                Text(new Rect(724,378,394,26),$"ちかいところ  {minDistance/1000:F2} m",16,muted);
+                maxDistance=Mathf.Max(maxDistance,minDistance+100);
+                maxDistance=SoftSlider(new Rect(724,476,394,22),maxDistance,Mathf.Max(minDistance+100,1000),5000);
+                Text(new Rect(724,447,394,26),$"とおいところ  {maxDistance/1000:F2} m",16,muted);
+            }
+            else
+            {
+                if(SoftButton(new Rect(724,275,190,43),"ゆか・からだ",!table ? Rgb(0xD6E7CD) : Rgb(0xF3EAD7)))SetPreset(false);
+                if(SoftButton(new Rect(928,275,190,43),"つくえ・て",table ? Rgb(0xD6E7CD) : Rgb(0xF3EAD7)))SetPreset(true);
+                Text(new Rect(724,342,394,31),"背景からの高さ",18,ink);
+                minHeight=SoftSlider(new Rect(724,407,394,22),minHeight,10,1500);
+                Text(new Rect(724,378,394,26),$"ひくいところ  {minHeight:F0} mm",16,muted);
+                maxHeight=Mathf.Max(maxHeight,minHeight+10);
+                maxHeight=SoftSlider(new Rect(724,476,394,22),maxHeight,Mathf.Max(minHeight+10,50),2500);
+                Text(new Rect(724,447,394,26),$"たかいところ  {maxHeight:F0} mm",16,muted);
+            }
+            GUI.enabled=live&&source.Running&&!source.Starting;
+            if(SoftButton(new Rect(724,525,394,50),front ? "あそぶ人を えらびなおす" : "背景を とりなおす",Rgb(0xE8BE6C)))
+            { if(front)Connect();else Calibrate(); }
             GUI.enabled=true;
-            Text(new Rect(724,588,394,50),"人や手を映さず、床や机だけにしてから\n「背景を とりなおす」を押してください。",15,muted);
+            if(!front&&live&&source.Running)
+                Text(new Rect(724,588,394,50),"人や手を映さず、床や机だけにしてから\n「背景を とりなおす」を押してください。",15,muted);
             if(SoftButton(new Rect(724,652,190,43),mirror ? "左右反転：オン" : "左右反転：オフ",Rgb(0xF3EAD7)))mirror=!mirror;
             if(SoftButton(new Rect(928,652,190,43),invert ? "回転反転：オン" : "回転反転：オフ",Rgb(0xF3EAD7)))invert=!invert;
             if(SoftButton(new Rect(300,744,206,48),"はじめから",Rgb(0xF3EAD7)))ResetRound();
-            Text(new Rect(526,748,310,40),$"ごちそう {score} こ ・ おとした / ちがった {misses} こ",14,muted,TextAnchor.MiddleCenter);
             if(SoftButton(new Rect(865,738,253,59),"あそびに もどる",Rgb(0xD6E7CD))) { settingsOpen=false;paused=false;draggingGate=false; }
+        }
+        Vector2 PreviewPoint(Vector2 point,Rect fitted)
+        {
+            float x=previewMirrored ? preview.width-1-point.x : point.x;
+            return new Vector2(fitted.x+x/preview.width*fitted.width,fitted.y+point.y/preview.height*fitted.height);
+        }
+        string FrontPrompt()
+        {
+            if(handLine.Problem==FrontPoseProblem.HandsTooClose)return "りょうてを すこし はなしてね";
+            if(handLine.Problem==FrontPoseProblem.OutOfRange)return "せっていの きょりを たしかめよう";
+            return "りょうてが みえるように してね";
+        }
+        string FrontStatus()
+        {
+            if(ready)return $"両手が みえています。\n手まで {handLine.DistanceMm/1000:F2} m";
+            if(Time.unscaledTime-lastFrameAt>0.5f)return "新しい骨格データを待っています。\n両手が見えるように立ってください。";
+            if(handLine.Problem==FrontPoseProblem.OutOfRange)return "手が設定した距離の範囲外です。\n右の距離を調整するか、立つ位置を変えてね。";
+            if(handLine.Problem==FrontPoseProblem.HandsTooClose)return "両手を左右に 20 cm 以上離してね。\nかさなると、ゲームはひとやすみします。";
+            if(handLine.Problem==FrontPoseProblem.LowConfidence)return "両手がはっきり見えるまで ひとやすみ。\n手を体の横に出してみよう。";
+            return "正面に立って、両手を左右にひろげてね。\n交代したときは「えらびなおす」を押してね。";
         }
         void SetPreset(bool onTable)
         {
@@ -285,25 +291,70 @@ namespace Naispo.Overhead
             Circle(new Vector2(x+2*scale,y-18*scale),42*scale,color);
             Circle(new Vector2(x+45*scale,y-3*scale),28*scale,color);
         }
-        void Plant(float x,float y,float size)
+        void DrawCloudFace()
         {
-            Capsule(new Vector2(x,y),new Vector2(x,y-55*size),4*size,leaf);
-            Oval(new Rect(x-31*size,y-43*size,32*size,17*size),Rgb(0x89AF86));
-            Oval(new Rect(x,y-63*size,32*size,18*size),Rgb(0x89AF86));
+            float happy=Mathf.Max(0,cloudMood),sad=Mathf.Max(0,-cloudMood);
+            float amount=Mathf.Abs(cloudMood);
+            // Morph the same opaque strokes, so no separate face parts fade or pop apart.
+            for(int side=-1;side<=1;side+=2)
+                CloudFaceStroke(new Vector2(PivotX+side*22,202+sad*1.5f),
+                    happy*4.5f+sad*2,-happy*2.5f,side*sad*1.5f,
+                    Mathf.Lerp(6,3.4f,amount),Rgb(0xB2AA98));
+            CloudFaceStroke(new Vector2(PivotX,215.5f-cloudMood*3),
+                9+happy*2,cloudMood*7,0,Mathf.Lerp(5,3.4f,amount),Rgb(0xD6C4AA));
+        }
+        void CloudFaceStroke(Vector2 center,float halfWidth,float bend,float tilt,float width,Color color)
+        {
+            Vector2 previous=center+new Vector2(-halfWidth,-tilt);
+            for(int i=1;i<=12;i++)
+            {
+                float t=i/6f-1;
+                Vector2 point=center+new Vector2(t*halfWidth,bend*(1-t*t)+tilt*t);
+                Capsule(previous,point,width,color);
+                previous=point;
+            }
         }
         void Flower(float x,float y,float size,Color color)
         {
-            Capsule(new Vector2(x,y),new Vector2(x,y+35*size),3*size,leaf);
-            for(int i=0;i<5;i++) { float a=i*Mathf.PI*2/5;Circle(new Vector2(x+Mathf.Cos(a)*10*size,y+Mathf.Sin(a)*10*size),8*size,color); }
+            Vector2 head=new Vector2(x,y),basePoint=head+new Vector2(0,54*size);
+            float bend=x<720 ? 3*size : -3*size;
+            Vector2 middle=head+new Vector2(bend,30*size);
+            Capsule(basePoint,middle,3.5f*size,leaf);
+            Capsule(middle,head,3.5f*size,leaf);
+            // Attach both leaves directly to points on the same stem.
+            FlowerLeaf(Vector2.Lerp(head,middle,0.83f),22*size,10*size,-28);
+            FlowerLeaf(Vector2.Lerp(middle,basePoint,0.35f),24*size,11*size,208);
+            for(int i=0;i<5;i++)
+            {
+                float a=i*Mathf.PI*2/5-Mathf.PI/2;
+                Circle(head+new Vector2(Mathf.Cos(a),Mathf.Sin(a))*10*size,8*size,color);
+            }
             Circle(new Vector2(x,y),6*size,Rgb(0xFFF3CA));
+        }
+        void FlowerLeaf(Vector2 attachment,float length,float width,float angle)
+        {
+            Matrix4x4 original=GUI.matrix;
+            try
+            {
+                GUI.matrix=original*GameLayout.RotationAround(attachment,angle);
+                Oval(new Rect(attachment.x-2,attachment.y-width/2,length+2,width),Rgb(0x89AF86));
+            }
+            finally { GUI.matrix=original; }
         }
         void Sparkle(Vector2 p,float radius,Color color)
         {
-            Matrix4x4 old=GUI.matrix;
-            GUI.matrix=GUI.matrix*GameLayout.RotationAround(p,45);
-            Rounded(new Rect(p.x-radius*0.36f,p.y-radius,radius*0.72f,radius*2),radius*0.3f,color);
-            Rounded(new Rect(p.x-radius,p.y-radius*0.36f,radius*2,radius*0.72f),radius*0.3f,color);
-            GUI.matrix=old;
+            DrawIcon(sparkleIcon,p,Vector2.one*radius*2,color);
+        }
+        static void DrawIcon(Texture2D texture,Vector2 center,Vector2 size,Color color)
+        {
+            if(texture==null||size.x<=0||size.y<=0||color.a<=0)return;
+            Color previous=GUI.color;
+            try
+            {
+                GUI.color=color;
+                GUI.DrawTexture(new Rect(center-size/2,size),texture,ScaleMode.StretchToFill,true);
+            }
+            finally { GUI.color=previous; }
         }
         void Text(Rect rect,string text,int size,Color color,TextAnchor alignment=TextAnchor.UpperLeft)
         { label.fontSize=size;label.normal.textColor=color;label.alignment=alignment;GUI.Label(rect,text,label); }

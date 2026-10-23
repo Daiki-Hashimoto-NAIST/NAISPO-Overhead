@@ -8,24 +8,30 @@ namespace Naispo.Overhead
     {
         readonly DepthAnalyzer analyzer=new DepthAnalyzer();
         readonly List<Token> tokens=new List<Token>();
+        readonly FoodDropSchedule dropSchedule=new FoodDropSchedule();
         // Use one crop for all expressions of each character, with a little outline padding.
         readonly Monster leftMonster=new Monster("Left",new Rect(177,232,901,866));
         readonly Monster rightMonster=new Monster("Right",new Rect(190,134,875,1031));
         OverheadDepthSource source;
+        GameAudio sounds;
         Texture2D dot, preview, strawberry, fish;
         Color32[] previewPixels;
-        bool live, table, mirror=true, invert, ready, hasAngle, paused, settingsOpen, draggingGate;
-        float minHeight=300,maxHeight=2200,angle,targetAngle,spawnTimer,feedbackTime,lastFrameAt=-100,playTime;
-        int score,misses,streak,spawnCount;
-        string feedback="すきな ごはんを とどけよう！";
+        bool previewMirrored;
+        bool live, table, front, mirror=true, invert, ready, hasAngle, paused, settingsOpen, draggingGate;
+        float minHeight=300,maxHeight=2200,angle,targetAngle,lastFrameAt=-100,playTime;
+        float minDistance=700,maxDistance=3500;
+        FrontPose frontPose;
+        HandLineResult handLine;
+        int score,misses;
         const float PivotX=505,PivotY=530,HalfArm=170,FoodSize=56;
         static readonly Vector2 Pivot=new Vector2(PivotX,PivotY);
         static readonly Rect StrawberryCrop=new Rect(209,105,835,1051),FishCrop=new Rect(104,310,1062,646);
         class Token
         {
-            public Vector2 Position,Previous,Velocity;
+            public Vector2 Position,Velocity;
             public bool IsFish;
-            public float Cooldown,Rotation,SpinSpeed;
+            public float Rotation,SpinSpeed;
+            public float HitAt=-100,HitAngle;
         }
         sealed class Monster
         {
@@ -34,6 +40,7 @@ namespace Naispo.Overhead
             public readonly Texture2D[] Faces=new Texture2D[3];
             public int Expression;
             public float ReactedAt=-100;
+            public float LookDirection,Attention;
             public Monster(string side,Rect crop) { Side=side;Crop=crop; }
             public void Load()
             {
@@ -45,13 +52,14 @@ namespace Naispo.Overhead
                 }
             }
             public void React(bool correct,float time) { Expression=correct ? 1 : 2;ReactedAt=time; }
-            public void Reset() { Expression=0;ReactedAt=-100; }
+            public void Reset() { Expression=0;ReactedAt=-100;LookDirection=Attention=0; }
         }
 
         void Awake()
         {
             Application.targetFrameRate=60;
             source=GetComponent<OverheadDepthSource>();
+            sounds=gameObject.AddComponent<GameAudio>();
             leftMonster.Load();rightMonster.Load();
             strawberry=Resources.Load<Texture2D>("Food/Strawberry");
             fish=Resources.Load<Texture2D>("Food/Fish");
@@ -75,22 +83,33 @@ namespace Naispo.Overhead
                 else paused=!paused;
                 draggingGate=false;
             }
-            if(live && source.TryTake(out var depth,out int w,out int h))
+            if(live && source.TryTake(out var depth,out int w,out int h,out var pose))
             {
                 if(lastFrameAt<0) Debug.Log($"[Overhead] Live depth ready: {w} x {h}");
                 lastFrameAt=Time.unscaledTime;
-                analyzer.Process(depth,w,h,minHeight,maxHeight);
-                UpdatePreview(depth,w,h);
-                ready=analyzer.Calibrated && analyzer.Result.Valid;
-                if(ready)
+                if(front)
                 {
-                    float raw=analyzer.Result.AngleDegrees*(mirror ? -1 : 1)*(invert ? -1 : 1);
-                    targetAngle=SorterRules.NearestAxis(raw,hasAngle ? targetAngle : 0);
-                    hasAngle=true;
+                    frontPose=pose;
+                    handLine=FrontHandControl.Evaluate(pose,minDistance,maxDistance,mirror,invert);
+                    ready=handLine.Valid;
+                    if(ready)targetAngle=handLine.AngleDegrees;
                 }
+                else
+                {
+                    analyzer.Process(depth,w,h,minHeight,maxHeight);
+                    ready=analyzer.Calibrated && analyzer.Result.Valid;
+                    if(ready)
+                    {
+                        float raw=analyzer.Result.AngleDegrees*(mirror ? -1 : 1)*(invert ? -1 : 1);
+                        targetAngle=SorterRules.NearestAxis(raw,hasAngle ? targetAngle : 0);
+                        hasAngle=true;
+                    }
+                }
+                UpdatePreview(depth,w,h);
             }
             if(live && (Time.unscaledTime-lastFrameAt>0.5f || !source.Running)) ready=false;
             if(!live)ready=true;
+            sounds.SetPaused(settingsOpen||paused||(!ready&&!Celebrating));
             // Depth capture and calibration continue while the game is paused.
             if(settingsOpen||paused) { draggingGate=false;return; }
             if(!live)
@@ -111,49 +130,51 @@ namespace Naispo.Overhead
                         targetAngle=Mathf.Clamp((mouse.x-PivotX)/5,-65,65);
                 }
             }
-            angle=Mathf.Lerp(angle,targetAngle,1-Mathf.Exp(-10*dt));
-            if(!ready) return;
+            // A happy player may lower their hands during the party; finish its animation.
+            if(!ready&&!Celebrating) return;
             playTime+=dt;
-            spawnTimer-=dt;
-            if(spawnTimer<=0 && tokens.Count<7)
+            UpdateFeedback(dt);
+            if(Celebrating||!ready)return;
+            float previousAngle=angle;
+            angle=Mathf.Lerp(angle,targetAngle,1-Mathf.Exp(-10*dt));
+            if(dropSchedule.Advance(dt,tokens.Count+deliveries.Count,out var drop))
             {
-                spawnTimer=1.8f;
-                bool isFish=spawnCount++%2==1;
                 tokens.Add(new Token {
-                    Position=new Vector2(PivotX+Random.Range(-75f,75f),185),Velocity=new Vector2(0,85),IsFish=isFish,
+                    Position=new Vector2(PivotX+drop.XOffset,250),Velocity=new Vector2(0,85),IsFish=drop.IsFish,
                     Rotation=Random.Range(-35f,35f),SpinSpeed=Random.Range(50f,100f)*(Random.value<0.5f ? -1 : 1)
                 });
             }
             for(int i=tokens.Count-1;i>=0;i--)
             {
                 var token=tokens[i];
-                token.Previous=token.Position;
-                token.Velocity.y+=170*dt;
-                token.Position+=token.Velocity*dt;
+                bool bounced=FoodMotion.Advance(ref token.Position,ref token.Velocity,
+                    Pivot,previousAngle,angle,HalfArm,FoodSize/2,dt,out var impact);
                 token.Rotation=Mathf.Repeat(token.Rotation+token.SpinSpeed*dt,360);
                 token.SpinSpeed*=Mathf.Exp(-0.18f*dt);
-                token.Cooldown-=dt;
-                // Keep a stable circular contact area while the illustration turns.
-                float radius=FoodSize/2;
-                if(token.Cooldown<=0 && SorterRules.CrossesGate(token.Previous,token.Position,Pivot,angle,HalfArm,radius))
+                if(bounced)
                 {
-                    float rad=(Mathf.Repeat(angle+90,180)-90)*Mathf.Deg2Rad;
-                    Vector2 normal=new Vector2(Mathf.Sin(rad),-Mathf.Cos(rad));
-                    token.Position=token.Previous+normal*4;
-                    token.Velocity=SorterRules.LaunchVelocity(angle);
                     float spinDirection=Mathf.Abs(token.Velocity.x)>1 ? Mathf.Sign(token.Velocity.x) : Mathf.Sign(token.SpinSpeed);
                     token.SpinSpeed=spinDirection*(160+Mathf.Abs(token.Velocity.x)*0.45f);
-                    token.Cooldown=0.35f;
+                    if(playTime-token.HitAt>0.16f)
+                    {
+                        token.HitAt=playTime;token.HitAngle=impact.AngleDegrees;
+                        impacts.Add(new Impact { Position=impact.Point,StartedAt=playTime });
+                        sounds.PlayBounce(Mathf.InverseLerp(165,845,impact.Point.x));
+                    }
                 }
                 int exit=SorterRules.ExitSide(token.Position);
                 if(exit!=0)
                 {
-                    bool correct=(exit==1&&!token.IsFish)||(exit==2&&token.IsFish);
-                    if(correct) { score++; streak++; feedback=streak>=3 ? $"{streak}れんぞく！ すごい！" : "もぐもぐ！ おいしい！"; }
-                    else { misses++; streak=0; feedback=exit==3 ? "もうすこし かたむけてみよう" : "すきな ごはんは あしもとを みてね"; }
-                    if(exit==1)leftMonster.React(correct,playTime);
-                    if(exit==2)rightMonster.React(correct,playTime);
-                    feedbackTime=playTime;
+                    if(exit==3)
+                    {
+                        misses++;
+                        ReactCloud(false);
+                    }
+                    else deliveries.Add(new Delivery {
+                        Start=token.Position,IsFish=token.IsFish,Right=exit==2,
+                        Correct=(exit==1&&!token.IsFish)||(exit==2&&token.IsFish),
+                        StartedAt=playTime,Rotation=token.Rotation
+                    });
                     tokens.RemoveAt(i);
                 }
             }
@@ -171,26 +192,40 @@ namespace Naispo.Overhead
                 int index=y*w+x;
                 float value=depth[index]==0 ? 0 : Mathf.Clamp01(1-depth[index]/5000f);
                 Color c=new Color(0.04f+value*0.12f,0.06f+value*0.24f,0.09f+value*0.34f);
-                if(analyzer.Mask[index]!=0)c=new Color(0.98f,0.70f,0.29f);
+                if(!front&&analyzer.Mask[index]!=0)c=new Color(0.98f,0.70f,0.29f);
                 previewPixels[(h-1-y)*w+(mirror ? w-1-x : x)]=c;
             }
-            preview.SetPixels32(previewPixels);preview.Apply(false,false);
+            preview.SetPixels32(previewPixels);preview.Apply(false,false);previewMirrored=mirror;
         }
         void ResetRound()
         {
-            tokens.Clear();score=misses=streak=spawnCount=0;spawnTimer=1;
+            tokens.Clear();score=misses=0;
+            dropSchedule.Reset();ResetFeedback();
             leftMonster.Reset();rightMonster.Reset();
-            feedback="すきな ごはんを とどけよう！";feedbackTime=playTime;
         }
         void Connect()
         {
-            live=true;ready=false;hasAngle=false;lastFrameAt=-100;
-            source.StartCapture();
-            analyzer.BeginCalibration(30);
+            source.StopCapture();
+            live=true;ready=false;hasAngle=false;lastFrameAt=-100;draggingGate=false;
+            frontPose=default;handLine=default;
+            if(preview!=null)Destroy(preview);
+            preview=null;
+            source.StartCapture(front);
+            if(!front)analyzer.BeginCalibration(30);
             ResetRound();
         }
+        void SetCameraMode(bool useFront)
+        {
+            if(front==useFront)return;
+            front=useFront;hasAngle=false;angle=targetAngle=0;frontPose=default;handLine=default;
+            if(live)Connect();
+        }
         void Calibrate() { analyzer.BeginCalibration(30);ready=false;hasAngle=false;ResetRound(); }
-        void OnDestroy() { if(dot!=null)Destroy(dot);if(preview!=null)Destroy(preview);if(paper!=null)Destroy(paper); }
+        void OnDestroy()
+        {
+            if(dot!=null)Destroy(dot);if(preview!=null)Destroy(preview);if(paper!=null)Destroy(paper);
+            if(heartIcon!=null)Destroy(heartIcon);if(tangleIcon!=null)Destroy(tangleIcon);if(sparkleIcon!=null)Destroy(sparkleIcon);
+        }
     }
 
     public static class SorterRules
@@ -198,12 +233,7 @@ namespace Naispo.Overhead
         public static float NearestAxis(float angle,float previous) => previous+Mathf.Repeat(angle-previous+90,180)-90;
         public static bool CrossesGate(Vector2 from,Vector2 to,Vector2 center,float angle,float halfLength,float radius)
         {
-            float r=(Mathf.Repeat(angle+90,180)-90)*Mathf.Deg2Rad;
-            Vector2 tangent=new Vector2(Mathf.Cos(r),Mathf.Sin(r)),normal=new Vector2(Mathf.Sin(r),-Mathf.Cos(r));
-            float a=Vector2.Dot(from-center,normal)-radius,b=Vector2.Dot(to-center,normal)-radius;
-            if(a<0||b>0||a<=b)return false;
-            Vector2 contact=Vector2.Lerp(from,to,a/(a-b));
-            return Mathf.Abs(Vector2.Dot(contact-center,tangent))<=halfLength+radius;
+            return GateCollision.SweepCircle(from,to,center,angle,angle,halfLength,radius,0,out _);
         }
         public static Vector2 LaunchVelocity(float angle)
         {

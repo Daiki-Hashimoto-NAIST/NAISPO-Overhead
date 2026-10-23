@@ -39,6 +39,8 @@ public static class OverheadSetup
     [MenuItem("Overhead/Build Windows")]
     public static void BuildWindows()
     {
+        if(!System.IO.File.Exists("Assets/StreamingAssets/AzureKinect/dnn_model_2_0_op11.onnx"))
+            Debug.LogWarning("Front camera mode needs a body model. Run Setup-BodyTracking.cmd, then rebuild. Demo and overhead mode remain available.");
         CreateScene();
         var report=BuildPipeline.BuildPlayer(new BuildPlayerOptions {
             scenes=new[]{ScenePath},target=BuildTarget.StandaloneWindows64,

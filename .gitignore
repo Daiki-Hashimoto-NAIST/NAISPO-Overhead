@@ -12,6 +12,11 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
+# Body Tracking model and downloaded SDK packages are restored by Setup-BodyTracking.cmd.
+/Setup/
+/Assets/StreamingAssets/AzureKinect/*.onnx
+/Assets/StreamingAssets/AzureKinect/*.onnx.meta
+
 # MemoryCaptures can get excessive in size.
 # They also could contain extremely sensitive data
 /[Mm]emoryCaptures/

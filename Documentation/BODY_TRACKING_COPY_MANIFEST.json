@@ -1,0 +1,50 @@
+{
+  "sdkVersion": "1.1.2",
+  "source": "https://www.microsoft.com/en-us/download/details.aspx?id=104221",
+  "packageSource": "https://www.nuget.org/packages/Microsoft.Azure.Kinect.BodyTracking/1.1.2",
+  "modelPackageSha256": "6151ff7e01a623fa2c15f01d9dfc22457c1353c484939d560a6f57a481ad83bf",
+  "files": [
+    {
+      "path": "Assets/Plugins/AzureKinect/Managed/Microsoft.Azure.Kinect.BodyTracking.dll",
+      "sdkRelativePath": "sdk/netstandard2.0/release/Microsoft.Azure.Kinect.BodyTracking.dll",
+      "bytes": 29616,
+      "sha256": "37f8b8c8e18839292292b36b25cf8bba7bbcdf171bf24c84eba7100fefc7e355",
+      "committed": true
+    },
+    {
+      "path": "Assets/Plugins/AzureKinect/x86_64/k4abt.dll",
+      "sdkRelativePath": "sdk/windows-desktop/amd64/release/bin/k4abt.dll",
+      "bytes": 4519856,
+      "sha256": "1bcc26d897861b1a6e05790abfaaa6f83013c846d7f03365d917c12a59da1767",
+      "committed": true
+    },
+    {
+      "path": "Assets/Plugins/AzureKinect/x86_64/directml.dll",
+      "sdkRelativePath": "sdk/windows-desktop/amd64/release/bin/directml.dll",
+      "bytes": 9487256,
+      "sha256": "7d97a62d7d002f3f3f9dcdbe2e0e60ca334d1d5df8e638b8ec4d5aeeed1ecd2b",
+      "committed": true
+    },
+    {
+      "path": "Assets/Plugins/AzureKinect/x86_64/onnxruntime.dll",
+      "sdkRelativePath": "sdk/windows-desktop/amd64/release/bin/onnxruntime.dll",
+      "bytes": 11994544,
+      "sha256": "05dc67fce5ea67d10d5ab8fcd6347d2a1f64049bdb70d0eea08bb77bb947aa09",
+      "committed": true
+    },
+    {
+      "path": "Assets/Plugins/AzureKinect/x86_64/onnxruntime_providers_shared.dll",
+      "sdkRelativePath": "sdk/windows-desktop/amd64/release/bin/onnxruntime_providers_shared.dll",
+      "bytes": 19864,
+      "sha256": "a93654bea0a7cffe7ecf6dc84604b962e0f37383d1a8c6f1a5e0d755974a7871",
+      "committed": true
+    },
+    {
+      "path": "Assets/StreamingAssets/AzureKinect/dnn_model_2_0_op11.onnx",
+      "sdkRelativePath": "sdk/windows-desktop/amd64/release/bin/dnn_model_2_0_op11.onnx",
+      "bytes": 166778023,
+      "sha256": "40bf149c8e3dc4cba34cff4f5c3db6f5d5d4e6559d525df1aa02c2e6c80f7d2d",
+      "committed": false
+    }
+  ]
+}
