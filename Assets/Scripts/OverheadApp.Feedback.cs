@@ -5,7 +5,8 @@ namespace Naispo.Overhead
 {
     public sealed partial class OverheadApp
     {
-        const float DeliveryDuration=0.42f,CelebrationDuration=2.8f;
+        const float DeliveryDuration=0.42f;
+        float CelebrationDuration => garden.IsComplete ? GardenAtmosphere.FinaleDuration : GardenAtmosphere.MilestoneDuration;
         readonly List<Delivery> deliveries=new List<Delivery>();
         readonly List<Impact> impacts=new List<Impact>();
         float celebrationAt=-100;
@@ -37,14 +38,20 @@ namespace Naispo.Overhead
                 ReactCloud(delivery.Correct);
                 if(delivery.Correct)
                 {
-                    score++;
-                    if(score%10==0)
+                    if(garden.Deliver(playTime))
                     {
                         celebrationAt=playTime;
                         dropSchedule.RestartWarning();
                         sounds.PlayCelebration();
                     }
                     else if(!Celebrating)sounds.PlayDelivery(true);
+                    if(garden.IsComplete)
+                    {
+                        // Pending food cannot score past the goal or interrupt the ending.
+                        tokens.Clear();deliveries.Clear();impacts.Clear();
+                        draggingGate=false;
+                        break;
+                    }
                 }
                 else
                 {
@@ -52,7 +59,7 @@ namespace Naispo.Overhead
                     if(!Celebrating)sounds.PlayDelivery(false);
                 }
             }
-            float moodTarget=Celebrating ? 1 : playTime-cloudReactedAt<1.8f ? cloudTarget : 0;
+            float moodTarget=Celebrating||garden.IsComplete ? 1 : playTime-cloudReactedAt<1.8f ? cloudTarget : 0;
             cloudMood=Mathf.Lerp(cloudMood,moodTarget,1-Mathf.Exp(-8*dt));
             UpdateMonsterAttention(dt);
         }
@@ -72,7 +79,7 @@ namespace Naispo.Overhead
 
         void DrawDropWarning()
         {
-            if(!dropSchedule.HasWarning||Celebrating)return;
+            if(!dropSchedule.HasWarning||Celebrating||garden.IsComplete)return;
             var next=dropSchedule.Upcoming;
             float progress=dropSchedule.WarningProgress;
             Vector2 center=new Vector2(PivotX+next.XOffset,250);

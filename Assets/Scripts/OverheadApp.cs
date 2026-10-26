@@ -9,6 +9,7 @@ namespace Naispo.Overhead
         readonly DepthAnalyzer analyzer=new DepthAnalyzer();
         readonly List<Token> tokens=new List<Token>();
         readonly FoodDropSchedule dropSchedule=new FoodDropSchedule();
+        readonly GardenProgress garden=new GardenProgress();
         // Use one crop for all expressions of each character, with a little outline padding.
         readonly Monster leftMonster=new Monster("Left",new Rect(177,232,901,866));
         readonly Monster rightMonster=new Monster("Right",new Rect(190,134,875,1031));
@@ -22,14 +23,15 @@ namespace Naispo.Overhead
         float minDistance=700,maxDistance=3500;
         FrontPose frontPose;
         HandLineResult handLine;
-        int score,misses;
+        int score => garden.DeliveredCount;
+        int misses;
         const float PivotX=505,PivotY=530,HalfArm=170,FoodSize=56;
         static readonly Vector2 Pivot=new Vector2(PivotX,PivotY);
         static readonly Rect StrawberryCrop=new Rect(209,105,835,1051),FishCrop=new Rect(104,310,1062,646);
         class Token
         {
             public Vector2 Position,Velocity;
-            public bool IsFish;
+            public bool IsFish,HasTouchedGate;
             public float Rotation,SpinSpeed;
             public float HitAt=-100,HitAngle;
         }
@@ -109,9 +111,17 @@ namespace Naispo.Overhead
             }
             if(live && (Time.unscaledTime-lastFrameAt>0.5f || !source.Running)) ready=false;
             if(!live)ready=true;
-            sounds.SetPaused(settingsOpen||paused||(!ready&&!Celebrating));
+            sounds.SetPaused(settingsOpen||paused||(!ready&&!Celebrating&&!garden.IsComplete));
             // Depth capture and calibration continue while the game is paused.
             if(settingsOpen||paused) { draggingGate=false;return; }
+            // The finished garden stays alive even when the player lowers their hands.
+            if(garden.IsComplete)
+            {
+                draggingGate=false;
+                playTime+=dt;
+                UpdateFeedback(dt);
+                return;
+            }
             if(!live)
             {
                 ready=true;
@@ -134,7 +144,7 @@ namespace Naispo.Overhead
             if(!ready&&!Celebrating) return;
             playTime+=dt;
             UpdateFeedback(dt);
-            if(Celebrating||!ready)return;
+            if(Celebrating||garden.IsComplete||!ready)return;
             float previousAngle=angle;
             angle=Mathf.Lerp(angle,targetAngle,1-Mathf.Exp(-10*dt));
             if(dropSchedule.Advance(dt,tokens.Count+deliveries.Count,out var drop))
@@ -153,6 +163,7 @@ namespace Naispo.Overhead
                 token.SpinSpeed*=Mathf.Exp(-0.18f*dt);
                 if(bounced)
                 {
+                    token.HasTouchedGate=true;
                     float spinDirection=Mathf.Abs(token.Velocity.x)>1 ? Mathf.Sign(token.Velocity.x) : Mathf.Sign(token.SpinSpeed);
                     token.SpinSpeed=spinDirection*(160+Mathf.Abs(token.Velocity.x)*0.45f);
                     if(playTime-token.HitAt>0.16f)
@@ -162,7 +173,9 @@ namespace Naispo.Overhead
                         sounds.PlayBounce(Mathf.InverseLerp(165,845,impact.Point.x));
                     }
                 }
-                int exit=SorterRules.ExitSide(token.Position);
+                int exit=FoodDeliveryRules.DepartedSide(token.HasTouchedGate,token.Position,token.Velocity,
+                    Pivot,HalfArm,FoodSize/2,FoodMotion.GateHalfThickness);
+                if(exit==0)exit=SorterRules.ExitSide(token.Position);
                 if(exit!=0)
                 {
                     if(exit==3)
@@ -199,7 +212,8 @@ namespace Naispo.Overhead
         }
         void ResetRound()
         {
-            tokens.Clear();score=misses=0;
+            tokens.Clear();misses=0;garden.Reset();
+            draggingGate=false;angle=targetAngle=0;hasAngle=false;
             dropSchedule.Reset();ResetFeedback();
             leftMonster.Reset();rightMonster.Reset();
         }
@@ -223,7 +237,10 @@ namespace Naispo.Overhead
         void Calibrate() { analyzer.BeginCalibration(30);ready=false;hasAngle=false;ResetRound(); }
         void OnDestroy()
         {
+            DestroyGardenArt();
+            DestroyMeadowArt();
             if(dot!=null)Destroy(dot);if(preview!=null)Destroy(preview);if(paper!=null)Destroy(paper);
+            if(warmPaper!=null)Destroy(warmPaper);
             if(heartIcon!=null)Destroy(heartIcon);if(tangleIcon!=null)Destroy(tangleIcon);if(sparkleIcon!=null)Destroy(sparkleIcon);
         }
     }

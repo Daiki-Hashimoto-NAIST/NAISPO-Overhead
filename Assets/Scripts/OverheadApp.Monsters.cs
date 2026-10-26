@@ -59,14 +59,15 @@ namespace Naispo.Overhead
         {
             float elapsed=playTime-monster.ReactedAt;
             float celebration=playTime-celebrationAt;
-            bool dancing=celebration>=0&&celebration<CelebrationDuration;
-            float danceEnvelope=dancing ? MonsterHold(celebration,0,0.3f,2.35f,CelebrationDuration) : 0;
-            float reactionWeight=dancing ? 1-MonsterEase(celebration,0,0.3f) : 1;
+            bool celebrating=celebration>=0&&celebration<CelebrationDuration;
+            float celebrationEnvelope=celebrating
+                ? MonsterHold(celebration,0,0.2f,CelebrationDuration-0.3f,CelebrationDuration) : 0;
+            float reactionWeight=celebrating ? 1-MonsterEase(celebration,0,0.2f) : 1;
             bool reacting=elapsed>=0&&elapsed<2.25f&&monster.Expression!=0;
             float phase=right ? 1.7f : 0;
-            float breath=Mathf.Sin(playTime*(right ? 1.48f : 1.62f)+phase);
-            float weightShift=Mathf.Sin(playTime*1.12f+phase);
-            float anticipation=Mathf.SmoothStep(0,1,monster.Attention)*(1-danceEnvelope);
+            float breath=Mathf.Sin(playTime*(right ? 1.48f : 1.62f)+phase)*(1-celebrationEnvelope*0.5f);
+            float weightShift=Mathf.Sin(playTime*1.12f+phase)*(1-celebrationEnvelope);
+            float anticipation=Mathf.SmoothStep(0,1,monster.Attention)*(1-celebrationEnvelope);
             if(reacting)anticipation*=1-0.65f*MonsterHold(elapsed,0,0.3f,1.85f,2.25f);
             float lean=monster.LookDirection*anticipation;
             float sx=1-breath*0.008f-anticipation*0.012f;
@@ -110,21 +111,26 @@ namespace Naispo.Overhead
                 }
             }
 
-            if(dancing)
+            if(celebrating)
             {
-                expression=1;
-                float dancePhase=celebration*Mathf.PI*2/1.65f+(right ? Mathf.PI*0.8f : 0);
-                float dance=Mathf.Sin(dancePhase);
-                float hopTime=celebration-(right ? 0.82f : 0.48f);
-                float crouch=MonsterPulse(hopTime,-0.22f,-0.08f,0.08f)*danceEnvelope;
-                float landing=MonsterPulse(hopTime,0.56f,0.7f,0.98f)*danceEnvelope;
-                float hop=MonsterHold(hopTime,0,0.23f,0.31f,0.59f)*danceEnvelope;
-                rotation+=dance*3.8f*danceEnvelope;
-                shift+=dance*4.5f*danceEnvelope;
-                jump=Mathf.Max(jump,(right ? 11 : 14)*hop);
-                sx+=crouch*0.035f+landing*0.04f-hop*0.012f;
-                sy-=crouch*0.04f+landing*0.045f-hop*0.018f;
+                // One shared small hop: gather, spring, land, then enjoy the result quietly.
+                // Completion keeps the same height and timing, with only a longer soft afterglow.
+                float time=celebration-(right ? 0.02f : 0);
+                float crouch=MonsterHold(time,0,0.18f,0.25f,0.4f);
+                float hop=MonsterHold(time,0.29f,0.53f,0.59f,0.88f);
+                float stretch=MonsterPulse(time,0.27f,0.45f,0.68f);
+                float landing=MonsterPulse(time,0.86f,0.99f,1.25f);
+                expression=celebration<0.29f ? 0 : 1;
+                jump=Mathf.Max(jump,12*hop);
+                sx+=crouch*0.032f-stretch*0.012f+landing*0.035f;
+                sy+=-crouch*0.04f+stretch*0.018f-landing*0.04f;
+                if(garden.IsComplete)
+                {
+                    float contentment=MonsterHold(celebration,1.1f,1.5f,2.15f,2.6f);
+                    sx-=contentment*0.003f;sy+=contentment*0.006f;
+                }
             }
+            if(garden.IsComplete)expression=1;
             // Roll around the supporting edge of the feet rather than into the floor.
             float supportLift=Mathf.Abs(Mathf.Sin(rotation*Mathf.Deg2Rad))*MonsterWidth*0.5f*sx;
             return new MonsterVisualPose
@@ -132,7 +138,7 @@ namespace Naispo.Overhead
                 Transform=Matrix4x4.TRS(new Vector3(centerX+shift,MonsterFeetY-jump-supportLift,0),
                     Quaternion.Euler(0,0,rotation),new Vector3(sx,sy,1)),
                 Height=MonsterWidth*monster.Crop.height/monster.Crop.width,
-                GroundX=centerX+shift,Jump=jump,Elapsed=elapsed,Expression=expression,Celebrating=dancing
+                GroundX=centerX+shift,Jump=jump,Elapsed=elapsed,Expression=expression,Celebrating=celebrating
             };
         }
 

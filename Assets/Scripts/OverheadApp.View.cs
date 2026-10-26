@@ -7,7 +7,7 @@ namespace Naispo.Overhead
         static Color Rgb(int value,float alpha=1) => new Color(((value>>16)&255)/255f,((value>>8)&255)/255f,(value&255)/255f,alpha);
         readonly Color ink=Rgb(0x59433E),muted=Rgb(0x847B67),coral=Rgb(0xEF8875),cyan=Rgb(0x66BABB);
         readonly Color cream=Rgb(0xFFFDF3),outline=Rgb(0xDFD5B7),leaf=Rgb(0x729C74);
-        Texture2D paper,heartIcon,tangleIcon,sparkleIcon;
+        Texture2D paper,warmPaper,heartIcon,tangleIcon,sparkleIcon;
         Font roundFont;
         GUIStyle label,button,sliderThumb;
 
@@ -16,12 +16,19 @@ namespace Naispo.Overhead
             roundFont=Resources.Load<Font>("Fonts/RoundedJapanese");
             if(roundFont==null)Debug.LogError("Missing rounded Japanese font");
             paper=new Texture2D(8,128,TextureFormat.RGBA32,false) { wrapMode=TextureWrapMode.Clamp };
+            warmPaper=new Texture2D(8,128,TextureFormat.RGBA32,false) { wrapMode=TextureWrapMode.Clamp };
             for(int y=0;y<128;y++)for(int x=0;x<8;x++)
+            {
                 paper.SetPixel(x,y,Color.Lerp(Rgb(0xEAF3DC),Rgb(0xFFF5DE),y/127f));
+                warmPaper.SetPixel(x,y,Color.Lerp(Rgb(0xF1EFCF),Rgb(0xFFF0CB),y/127f));
+            }
             paper.Apply();
+            warmPaper.Apply(false,true);
             heartIcon=GameIconArt.CreateHeart();
             tangleIcon=GameIconArt.CreateTangle();
             sparkleIcon=GameIconArt.CreateSparkle();
+            InitializeGardenArt();
+            InitializeMeadowArt();
         }
         void Styles()
         {
@@ -45,30 +52,38 @@ namespace Naispo.Overhead
             GUI.matrix=canvas*Matrix4x4.Translate(new Vector3(GameLayout.StageOffsetX,0,0));
             DrawPlayfield();
             GUI.matrix=canvas;
+            DrawGardenForeground();
+            if(garden.IsComplete&&!Celebrating)
+            {
+                GUI.matrix=canvas*Matrix4x4.Translate(new Vector3(GameLayout.StageOffsetX,0,0));
+                DrawGardenComplete();
+                GUI.matrix=canvas;
+            }
             if(settingsOpen)DrawSettings();
             else if(paused)DrawPause();
             GUI.matrix=original;
         }
         void DrawLandscape()
         {
+            float warmth=GardenAtmosphere.Warmth(garden,playTime);
             GUI.DrawTexture(new Rect(0,0,1440,900),paper);
-            Oval(new Rect(-190,490,630,470),Rgb(0xD8E8C5));
-            Oval(new Rect(1070,510,630,430),Rgb(0xCDE4D1));
-            Oval(new Rect(-210,650,730,310),Rgb(0xC5DCA9));
-            Oval(new Rect(1010,692,650,280),Rgb(0xB9D6BC));
-            Oval(new Rect(170,660,1100,330),Rgb(0xF5E8C7));
+            Color originalColor=GUI.color;
+            GUI.color=new Color(1,1,1,warmth);
+            GUI.DrawTexture(new Rect(0,0,1440,900),warmPaper);
+            GUI.color=originalColor;
+            Oval(new Rect(-190,490,630,470),Color.Lerp(Rgb(0xD8E8C5),Rgb(0xE0EBC5),warmth));
+            Oval(new Rect(1070,510,630,430),Color.Lerp(Rgb(0xCDE4D1),Rgb(0xD8E8CF),warmth));
+            Oval(new Rect(-210,650,730,310),Color.Lerp(Rgb(0xC5DCA9),Rgb(0xD3E2AC),warmth));
+            Oval(new Rect(1010,692,650,280),Color.Lerp(Rgb(0xB9D6BC),Rgb(0xC9DDBA),warmth));
+            DrawMeadowColors();
+            Oval(new Rect(170,660,1100,330),Color.Lerp(Rgb(0xF5E8C7),Rgb(0xFFF0CC),warmth));
             Cloud(124,263,0.7f,Rgb(0xFFFCF0));
             Cloud(1310,230,0.85f,Rgb(0xFFFCF0));
             Cloud(1200,373,0.45f,Rgb(0xF8FAEB));
             // Every stem belongs to a complete flower, with leaves joined below its head.
-            Flower(91,698,1.05f,Rgb(0xE9AF94));Flower(1346,684,1.05f,Rgb(0xEFCA73));
-            Flower(158,769,0.7f,Rgb(0xE6B9BC));Flower(1278,759,0.75f,Rgb(0xFFF7DD));
-            for(int i=0;i<6;i++)
-            {
-                float x=70+i*47;
-                Oval(new Rect(x,816+(i%2)*8,8,4),Rgb(0xC9C799));
-                Oval(new Rect(1110+i*43,821-(i%3)*5,8,4),Rgb(0xB0C49F));
-            }
+            Flower(92,742,0.8f,Rgb(0xE9AF94));Flower(1340,730,0.66f,Rgb(0xEFCA73));
+            Flower(180,797,0.45f,Rgb(0xE6B9BC));Flower(1246,810,0.78f,Rgb(0xFFF7DD));
+            DrawGardenFlowers();
         }
         void DrawHeader()
         {
@@ -76,7 +91,7 @@ namespace Naispo.Overhead
             Card(new Rect(960,46,196,64),cream,22);
             float celebrationPulse=Celebrating ? Mathf.Sin((playTime-celebrationAt)*6)*3 : 0;
             Sparkle(new Vector2(997,78),18+celebrationPulse,Rgb(0xE6B450));
-            Text(new Rect(1032,50,108,56),score.ToString(),32,ink,TextAnchor.MiddleLeft);
+            Text(new Rect(1027,50,119,56),$"{score} / {GardenProgress.Goal}",28,ink,TextAnchor.MiddleLeft);
             if(SoftButton(new Rect(1180,46,116,64),"ひとやすみ",cream)) { paused=true;draggingGate=false; }
             if(SoftButton(new Rect(1308,46,91,64),"せってい",cream)) { settingsOpen=true;draggingGate=false; }
         }
@@ -93,6 +108,7 @@ namespace Naispo.Overhead
             DrawMonster(rightMonster,845,cyan,true);
             DrawFavorite(165,false);
             DrawFavorite(845,true);
+            if(garden.IsComplete)return;
             float displayAngle=Mathf.Repeat(angle+90,180)-90;
             Vector2 axis=new Vector2(Mathf.Cos(displayAngle*Mathf.Deg2Rad),Mathf.Sin(displayAngle*Mathf.Deg2Rad));
             // Rounded wooden paddle, with strawberry and fish colored ends.
@@ -114,6 +130,15 @@ namespace Naispo.Overhead
                 Rounded(new Rect(315,353,380,67),24,cream);
                 Text(new Rect(330,364,350,43),prompt,21,muted,TextAnchor.MiddleCenter);
             }
+        }
+        void DrawGardenComplete()
+        {
+            Card(new Rect(PivotX-205,348,410,188),cream,30);
+            Text(new Rect(PivotX-185,372,370,48),"おにわが できた！",30,ink,TextAnchor.MiddleCenter);
+            bool enabled=GUI.enabled;
+            GUI.enabled=enabled&&!settingsOpen&&!paused;
+            if(SoftButton(new Rect(PivotX-114,448,228,58),"もういちど",Rgb(0xD6E7CD)))ResetRound();
+            GUI.enabled=enabled;
         }
         void DrawFavorite(float centerX,bool isFish)
         {
@@ -317,19 +342,25 @@ namespace Naispo.Overhead
         void Flower(float x,float y,float size,Color color)
         {
             Vector2 head=new Vector2(x,y),basePoint=head+new Vector2(0,54*size);
-            float bend=x<720 ? 3*size : -3*size;
-            Vector2 middle=head+new Vector2(bend,30*size);
-            Capsule(basePoint,middle,3.5f*size,leaf);
-            Capsule(middle,head,3.5f*size,leaf);
-            // Attach both leaves directly to points on the same stem.
-            FlowerLeaf(Vector2.Lerp(head,middle,0.83f),22*size,10*size,-28);
-            FlowerLeaf(Vector2.Lerp(middle,basePoint,0.35f),24*size,11*size,208);
-            for(int i=0;i<5;i++)
+            Matrix4x4 original=GUI.matrix;
+            try
             {
-                float a=i*Mathf.PI*2/5-Mathf.PI/2;
-                Circle(head+new Vector2(Mathf.Cos(a),Mathf.Sin(a))*10*size,8*size,color);
+                GUI.matrix=original*GameLayout.RotationAround(basePoint,GardenAtmosphere.BreezeAngle(garden,playTime,x));
+                float bend=x<720 ? 3*size : -3*size;
+                Vector2 middle=head+new Vector2(bend,30*size);
+                Capsule(basePoint,middle,3.5f*size,leaf);
+                Capsule(middle,head,3.5f*size,leaf);
+                // Every part sways together around the same root.
+                FlowerLeaf(Vector2.Lerp(head,middle,0.83f),22*size,10*size,-28);
+                FlowerLeaf(Vector2.Lerp(middle,basePoint,0.35f),24*size,11*size,208);
+                for(int i=0;i<5;i++)
+                {
+                    float a=i*Mathf.PI*2/5-Mathf.PI/2;
+                    Circle(head+new Vector2(Mathf.Cos(a),Mathf.Sin(a))*10*size,8*size,color);
+                }
+                Circle(new Vector2(x,y),6*size,Rgb(0xFFF3CA));
             }
-            Circle(new Vector2(x,y),6*size,Rgb(0xFFF3CA));
+            finally { GUI.matrix=original; }
         }
         void FlowerLeaf(Vector2 attachment,float length,float width,float angle)
         {
