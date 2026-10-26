@@ -5,9 +5,17 @@ namespace Naispo.Overhead
     public sealed partial class OverheadApp
     {
         static Color Rgb(int value,float alpha=1) => new Color(((value>>16)&255)/255f,((value>>8)&255)/255f,(value&255)/255f,alpha);
+        static Color WithAlpha(Color color,float alpha) => new Color(color.r,color.g,color.b,color.a*alpha);
         readonly Color ink=Rgb(0x59433E),muted=Rgb(0x847B67),coral=Rgb(0xEF8875),cyan=Rgb(0x66BABB);
         readonly Color cream=Rgb(0xFFFDF3),outline=Rgb(0xDFD5B7),leaf=Rgb(0x729C74);
-        Texture2D paper,warmPaper,heartIcon,tangleIcon,sparkleIcon;
+        readonly Color nightTop=Rgb(0x102D38),nightBottom=Rgb(0x193F43);
+        readonly Color nightWood=Rgb(0x493C35),oldGold=Rgb(0x92764B);
+        readonly Color moonlight=Rgb(0xA8D4CE),candle=Rgb(0xE9B875);
+        readonly Color nightLeaf=Rgb(0x38685B),nightShadow=Rgb(0x0B2229);
+        static readonly Rect BranchCrop=new Rect(56,305,2062,113);
+        static readonly Vector2 BranchAnchor=new Vector2(1086,362);
+        static readonly float BranchScale=360/BranchCrop.width;
+        Texture2D paper,warmPaper,heartIcon,tangleIcon,sparkleIcon,magicStarIcon,glow,background,branch,lantern;
         Font roundFont;
         GUIStyle label,button,sliderThumb;
 
@@ -19,16 +27,32 @@ namespace Naispo.Overhead
             warmPaper=new Texture2D(8,128,TextureFormat.RGBA32,false) { wrapMode=TextureWrapMode.Clamp };
             for(int y=0;y<128;y++)for(int x=0;x<8;x++)
             {
-                paper.SetPixel(x,y,Color.Lerp(Rgb(0xEAF3DC),Rgb(0xFFF5DE),y/127f));
-                warmPaper.SetPixel(x,y,Color.Lerp(Rgb(0xF1EFCF),Rgb(0xFFF0CB),y/127f));
+                paper.SetPixel(x,y,Color.Lerp(nightBottom,nightTop,y/127f));
+                // A faint candle wash gathers near the floor and leaves the teal night intact.
+                warmPaper.SetPixel(x,y,new Color(candle.r,candle.g,candle.b,Mathf.Lerp(0.16f,0f,y/127f)));
             }
             paper.Apply();
             warmPaper.Apply(false,true);
+            // One shared radial falloff keeps every soft light free of a hard rim.
+            glow=new Texture2D(64,64,TextureFormat.RGBA32,false)
+            {
+                name="NAISPO Glow",
+                wrapMode=TextureWrapMode.Clamp,
+                filterMode=FilterMode.Bilinear,
+                hideFlags=HideFlags.DontSave
+            };
+            for(int y=0;y<64;y++)for(int x=0;x<64;x++)
+            {
+                float distance=Vector2.Distance(new Vector2(x+0.5f,y+0.5f),new Vector2(32,32))/32f;
+                float alpha=Mathf.Clamp01(1-distance);
+                alpha=alpha*alpha*(3-2*alpha);
+                glow.SetPixel(x,y,new Color(1,1,1,alpha));
+            }
+            glow.Apply(false,true);
             heartIcon=GameIconArt.CreateHeart();
             tangleIcon=GameIconArt.CreateTangle();
             sparkleIcon=GameIconArt.CreateSparkle();
-            InitializeGardenArt();
-            InitializeMeadowArt();
+            magicStarIcon=GameIconArt.CreateMagicStar();
         }
         void Styles()
         {
@@ -41,7 +65,7 @@ namespace Naispo.Overhead
         {
             Styles();
             Matrix4x4 original=GUI.matrix;
-            Fill(new Rect(0,0,Screen.width,Screen.height),Rgb(0xE9E7CF));
+            Fill(new Rect(0,0,Screen.width,Screen.height),nightShadow);
             GUI.matrix=GameLayout.Matrix(Screen.width,Screen.height);
             DrawLandscape();
             bool modal=settingsOpen||paused;
@@ -52,7 +76,6 @@ namespace Naispo.Overhead
             GUI.matrix=canvas*Matrix4x4.Translate(new Vector3(GameLayout.StageOffsetX,0,0));
             DrawPlayfield();
             GUI.matrix=canvas;
-            DrawGardenForeground();
             if(garden.IsComplete&&!Celebrating)
             {
                 GUI.matrix=canvas*Matrix4x4.Translate(new Vector3(GameLayout.StageOffsetX,0,0));
@@ -67,27 +90,169 @@ namespace Naispo.Overhead
         {
             float warmth=GardenAtmosphere.Warmth(garden,playTime);
             GUI.DrawTexture(new Rect(0,0,1440,900),paper);
+            if(background!=null)
+                GUI.DrawTexture(Fit(new Rect(0,0,1440,900),background.width,background.height),
+                    background,ScaleMode.StretchToFill,true);
             Color originalColor=GUI.color;
-            GUI.color=new Color(1,1,1,warmth);
-            GUI.DrawTexture(new Rect(0,0,1440,900),warmPaper);
-            GUI.color=originalColor;
-            Oval(new Rect(-190,490,630,470),Color.Lerp(Rgb(0xD8E8C5),Rgb(0xE0EBC5),warmth));
-            Oval(new Rect(1070,510,630,430),Color.Lerp(Rgb(0xCDE4D1),Rgb(0xD8E8CF),warmth));
-            Oval(new Rect(-210,650,730,310),Color.Lerp(Rgb(0xC5DCA9),Rgb(0xD3E2AC),warmth));
-            Oval(new Rect(1010,692,650,280),Color.Lerp(Rgb(0xB9D6BC),Rgb(0xC9DDBA),warmth));
-            DrawMeadowColors();
-            Oval(new Rect(170,660,1100,330),Color.Lerp(Rgb(0xF5E8C7),Rgb(0xFFF0CC),warmth));
-            Cloud(124,263,0.7f,Rgb(0xFFFCF0));
-            Cloud(1310,230,0.85f,Rgb(0xFFFCF0));
-            Cloud(1200,373,0.45f,Rgb(0xF8FAEB));
-            // Every stem belongs to a complete flower, with leaves joined below its head.
-            Flower(92,742,0.8f,Rgb(0xE9AF94));Flower(1340,730,0.66f,Rgb(0xEFCA73));
-            Flower(180,797,0.45f,Rgb(0xE6B9BC));Flower(1246,810,0.78f,Rgb(0xFFF7DD));
-            DrawGardenFlowers();
+            try
+            {
+                GUI.color=new Color(1,1,1,warmth);
+                GUI.DrawTexture(new Rect(0,0,1440,900),warmPaper);
+            }
+            finally { GUI.color=originalColor; }
+            // The room lights sit above the painted room and below the HUD and food.
+            DrawLanternRoom();
         }
+
+        void DrawGreenhouseBack(float warmth)
+        {
+            // A dark floor and a shallow pool of moonlight build depth without lighting
+            // the central dropping corridor.
+            Oval(new Rect(-160,520,1760,540),new Color(nightShadow.r,nightShadow.g,nightShadow.b,0.55f));
+            Oval(new Rect(150,690,1140,320),Rgb(0x0E2A31,0.38f));
+            for(int i=0;i<3;i++)
+                Capsule(new Vector2(250,762+i*52),new Vector2(1190,762+i*52),2.5f,Rgb(0x2D5355,0.16f));
+
+            // The old gold window sits above the playfield, with an arch from y=120 to y=190.
+            Rounded(new Rect(470,120,500,130),26,oldGold);
+            Rounded(new Rect(474,124,492,122),24,Rgb(0x0D262E));
+            Arc(new Vector2(720,190),232,70,180,360,18,4,Rgb(0x92764B,0.90f));
+            Oval(new Rect(500,128,440,110),Rgb(0x2F6A6B,0.38f+warmth*0.06f));
+            Oval(new Rect(560,140,320,86),Rgb(0x3C7B78,0.24f+warmth*0.05f));
+            Glow(new Rect(540,190,360,330),new Color(moonlight.r,moonlight.g,moonlight.b,0.045f));
+            Fill(new Rect(718,126,4,122),Rgb(0x92764B,0.50f));
+            Fill(new Rect(478,184,484,3),Rgb(0x92764B,0.42f));
+            // A small moon in the clear right pane, away from the drop corridor and cloud.
+            Vector2 moon=new Vector2(862,154);
+            Glow(new Rect(moon.x-22,moon.y-22,44,44),new Color(moonlight.r,moonlight.g,moonlight.b,0.10f));
+            Circle(moon,10,Rgb(0xF6EBCB,0.94f));
+        }
+
+        void DrawGreenhouseFrame(float warmth)
+        {
+            // Uneven wooden beams and a thin antique-gold edge frame the whole stage.
+            Capsule(new Vector2(64,150),new Vector2(720,112),16,nightWood);
+            Capsule(new Vector2(720,112),new Vector2(1376,150),16,nightWood);
+            Capsule(new Vector2(64,150),new Vector2(720,112),2.5f,Rgb(0x92764B,0.55f));
+            Capsule(new Vector2(720,112),new Vector2(1376,150),2.5f,Rgb(0x92764B,0.55f));
+            Capsule(new Vector2(82,190),new Vector2(718,148),7,Rgb(0x3B3029,0.90f));
+            Capsule(new Vector2(722,148),new Vector2(1358,190),7,Rgb(0x3B3029,0.90f));
+
+            DrawPost(78,34,116,900);
+            DrawPost(1328,34,116,900);
+            Capsule(new Vector2(110,214),new Vector2(240,304),7,nightWood);
+            Capsule(new Vector2(110,214),new Vector2(240,304),1.6f,Rgb(0x92764B,0.35f));
+            Capsule(new Vector2(1330,214),new Vector2(1200,304),7,nightWood);
+            Capsule(new Vector2(1330,214),new Vector2(1200,304),1.6f,Rgb(0x92764B,0.35f));
+
+            DrawVines();
+            DrawLantern(206,300,warmth);
+            DrawLantern(1234,300,warmth);
+        }
+
+        void DrawPost(float x,float width,float top,float bottom)
+        {
+            Fill(new Rect(x,top,width,bottom-top),nightWood);
+            Fill(new Rect(x+4,top,3,bottom-top),Rgb(0x5C4C41,0.50f));
+            Fill(new Rect(x+width-8,top,2,bottom-top),Rgb(0x2C2420,0.72f));
+            Fill(new Rect(x-4,top,3,bottom-top),Rgb(0x92764B,0.32f));
+            Fill(new Rect(x+width+1,top,2,bottom-top),Rgb(0x92764B,0.20f));
+            // Only a few uneven grain lines, not a striped texture.
+            Fill(new Rect(x+13,top+90,2,260),Rgb(0x3D322C,0.55f));
+            Fill(new Rect(x+20,top+430,2,300),Rgb(0x3D322C,0.45f));
+        }
+
+        void DrawVines()
+        {
+            Color vine=Rgb(0x38685B,0.85f);
+            Vector2 leftA=new Vector2(100,250),leftB=new Vector2(134,354),
+                leftC=new Vector2(104,450),leftD=new Vector2(140,552);
+            Capsule(leftA,leftB,3.2f,vine);
+            Capsule(leftB,leftC,3.0f,vine);
+            Capsule(leftC,leftD,2.6f,vine);
+            VineLeaf(Vector2.Lerp(leftA,leftB,0.55f),18,10,-22,vine);
+            VineLeaf(Vector2.Lerp(leftB,leftC,0.25f),16,9,196,vine);
+            VineLeaf(Vector2.Lerp(leftC,leftD,0.235f),16,9,-18,vine);
+
+            Vector2 rightA=new Vector2(1340,250),rightB=new Vector2(1306,354),
+                rightC=new Vector2(1336,450),rightD=new Vector2(1300,552);
+            Capsule(rightA,rightB,3.2f,vine);
+            Capsule(rightB,rightC,3.0f,vine);
+            Capsule(rightC,rightD,2.6f,vine);
+            VineLeaf(Vector2.Lerp(rightA,rightB,0.55f),18,10,202,vine);
+            VineLeaf(Vector2.Lerp(rightB,rightC,0.25f),16,9,-15,vine);
+            VineLeaf(Vector2.Lerp(rightC,rightD,0.235f),16,9,195,vine);
+
+            Vector2 topA=new Vector2(542,146),topB=new Vector2(632,124),topC=new Vector2(712,118);
+            Capsule(topA,topB,2.6f,vine);
+            Capsule(topB,topC,2.4f,vine);
+            VineLeaf(Vector2.Lerp(topA,topB,0.65f),18,9,-60,vine);
+            VineLeaf(Vector2.Lerp(topB,topC,0.68f),15,8,-35,vine);
+        }
+
+        void VineLeaf(Vector2 attachment,float length,float width,float angle,Color color)
+        {
+            Matrix4x4 original=GUI.matrix;
+            try
+            {
+                GUI.matrix=original*GameLayout.RotationAround(attachment,angle);
+                Oval(new Rect(attachment.x-2,attachment.y-width/2,length+2,width),color);
+            }
+            finally { GUI.matrix=original; }
+        }
+
+        void DrawLantern(float x,float y,float warmth)
+        {
+            float glow=Mathf.Clamp01(0.08f+warmth*0.17f+FinaleBreath);
+            float flicker=1+Mathf.Sin(playTime*2.1f+x)*0.02f;
+            float halo=Mathf.Min(0.26f,glow*flicker);
+            Color originalColor=GUI.color;
+            try
+            {
+                Glow(new Rect(x-78,y-78,156,156),new Color(candle.r,candle.g,candle.b,halo));
+                Capsule(new Vector2(x,112),new Vector2(x,y-32),2,Rgb(0x92764B,0.55f));
+                Rounded(new Rect(x-15,y-28,30,16),6,nightWood);
+                Rounded(new Rect(x-12,y-14,24,30),7,Rgb(0x3A2C22));
+                Circle(new Vector2(x,y),9,new Color(candle.r,candle.g,candle.b,Mathf.Clamp01(0.55f+glow)));
+                Circle(new Vector2(x,y),4,Rgb(0xFFF3CC,0.90f));
+                Rounded(new Rect(x-15,y-28,30,4),2,Rgb(0x92764B,0.60f));
+            }
+            finally { GUI.color=originalColor; }
+        }
+
+        void DrawGreenhouseForeground()
+        {
+            Color stem=Rgb(0x38685B,0.90f),darkLeaf=Rgb(0x1E3C36,0.85f);
+            Capsule(new Vector2(18,902),new Vector2(94,772),8,stem);
+            Capsule(new Vector2(94,772),new Vector2(150,690),5,stem);
+            Oval(new Rect(64,758,74,30),darkLeaf);
+            Oval(new Rect(112,684,52,24),darkLeaf);
+            Oval(new Rect(20,842,58,26),darkLeaf);
+
+            Capsule(new Vector2(1422,902),new Vector2(1346,772),8,stem);
+            Capsule(new Vector2(1346,772),new Vector2(1290,690),5,stem);
+            Oval(new Rect(1302,758,74,30),darkLeaf);
+            Oval(new Rect(1276,684,52,24),darkLeaf);
+            Oval(new Rect(1362,842,58,26),darkLeaf);
+        }
+
+        void Arc(Vector2 center,float radiusX,float radiusY,float startDegrees,float endDegrees,
+            int segments,float width,Color color)
+        {
+            float previousAngle=startDegrees*Mathf.Deg2Rad;
+            Vector2 previous=center+new Vector2(Mathf.Cos(previousAngle)*radiusX,Mathf.Sin(previousAngle)*radiusY);
+            for(int i=1;i<=segments;i++)
+            {
+                float angle=Mathf.Lerp(startDegrees,endDegrees,i/(float)segments)*Mathf.Deg2Rad;
+                Vector2 point=center+new Vector2(Mathf.Cos(angle)*radiusX,Mathf.Sin(angle)*radiusY);
+                Capsule(previous,point,width,color);
+                previous=point;
+            }
+        }
+
         void DrawHeader()
         {
-            Text(new Rect(64,53,180,35),"NAISPO",22,Rgb(0x9A967D));
+            Text(new Rect(64,53,180,35),"NAISPO",22,Rgb(0xBFD8CF));
             Card(new Rect(960,46,196,64),cream,22);
             float celebrationPulse=Celebrating ? Mathf.Sin((playTime-celebrationAt)*6)*3 : 0;
             Sparkle(new Vector2(997,78),18+celebrationPulse,Rgb(0xE6B450));
@@ -97,30 +262,32 @@ namespace Naispo.Overhead
         }
         void DrawPlayfield()
         {
-            // Stretch the cloud to cover all three food drop regions.
-            Cloud(PivotX-45,209,1.08f,cream);
-            Cloud(PivotX+45,209,1.08f,cream);
-            DrawCloudFace();
             DrawDropWarning();
-            Oval(new Rect(20,704,290,70),Rgb(0xECCAB2));
-            Oval(new Rect(700,704,290,70),Rgb(0xBFDAD0));
             DrawMonster(leftMonster,165,coral,false);
             DrawMonster(rightMonster,845,cyan,true);
             DrawFavorite(165,false);
             DrawFavorite(845,true);
+            DrawStickGlow();
             if(garden.IsComplete)return;
             float displayAngle=Mathf.Repeat(angle+90,180)-90;
-            Vector2 axis=new Vector2(Mathf.Cos(displayAngle*Mathf.Deg2Rad),Mathf.Sin(displayAngle*Mathf.Deg2Rad));
-            // Rounded wooden paddle, with strawberry and fish colored ends.
-            Vector2 from=Pivot-axis*HalfArm,to=Pivot+axis*HalfArm;
-            Capsule(from+Vector2.up*5,to+Vector2.up*5,20,Rgb(0xC9B38D));
-            Capsule(from,to,20,ready ? Rgb(0xAA7755) : Rgb(0xB8AC91));
-            Capsule(from+new Vector2(0,-3),to+new Vector2(0,-3),10,Rgb(0xD9A979));
-            Circle(from,18,Rgb(0xFFF6E5));Circle(to,18,Rgb(0xFFF6E5));
-            Circle(from,13,coral);Circle(to,13,cyan);
-            Circle(Pivot+new Vector2(0,4),28,Rgb(0xBA9C76));
-            Circle(Pivot,26,cream);Circle(Pivot,17,Rgb(0xE9B95F));
-            Circle(Pivot,6,Rgb(0xFFF1C5));
+            if(branch==null)
+            {
+                Vector2 axis=new Vector2(Mathf.Cos(displayAngle*Mathf.Deg2Rad),Mathf.Sin(displayAngle*Mathf.Deg2Rad));
+                Capsule(Pivot-axis*HalfArm,Pivot+axis*HalfArm,20,Rgb(0x493C35));
+            }
+            else
+            {
+                Color oldColor=GUI.color;
+                Matrix4x4 oldMatrix=GUI.matrix;
+                try
+                {
+                    GUI.color=Color.white;
+                    GUI.matrix=oldMatrix*BranchTransform(Pivot,displayAngle);
+                    GUI.DrawTextureWithTexCoords(BranchRect(Pivot),branch,
+                        CropUv(BranchCrop,branch.width,branch.height),true);
+                }
+                finally { GUI.matrix=oldMatrix;GUI.color=oldColor; }
+            }
             foreach(var token in tokens)DrawAnimatedFood(token);
             DrawFoodFeedback();
             if(!ready&&!Celebrating)
@@ -131,10 +298,35 @@ namespace Naispo.Overhead
                 Text(new Rect(330,364,350,43),prompt,21,muted,TextAnchor.MiddleCenter);
             }
         }
+        void DrawStickGlow()
+        {
+            // Show only the strongest recent contact so overlapping hits never add up to white.
+            float strongest=0;
+            Vector2 position=default;
+            foreach(var impact in impacts)
+            {
+                float elapsed=playTime-impact.StartedAt;
+                if(elapsed<0||elapsed>0.30f)continue;
+                float strength=1-elapsed/0.30f;
+                if(strength<=strongest)continue;
+                strongest=strength;
+                position=impact.Position;
+            }
+            if(strongest<=0)return;
+            float radius=24+12*(1-strongest);
+            Color originalColor=GUI.color;
+            try
+            {
+                Glow(new Rect(position.x-radius,position.y-radius,radius*2,radius*2),
+                    new Color(moonlight.r,moonlight.g,moonlight.b,0.30f*strongest));
+            }
+            finally { GUI.color=originalColor; }
+        }
+
         void DrawGardenComplete()
         {
             Card(new Rect(PivotX-205,348,410,188),cream,30);
-            Text(new Rect(PivotX-185,372,370,48),"おにわが できた！",30,ink,TextAnchor.MiddleCenter);
+            Text(new Rect(PivotX-185,372,370,48),"あかりが ともった！",30,ink,TextAnchor.MiddleCenter);
             bool enabled=GUI.enabled;
             GUI.enabled=enabled&&!settingsOpen&&!paused;
             if(SoftButton(new Rect(PivotX-114,448,228,58),"もういちど",Rgb(0xD6E7CD)))ResetRound();
@@ -152,7 +344,7 @@ namespace Naispo.Overhead
             Rect crop=isFish ? FishCrop : StrawberryCrop;
             float scale=size/Mathf.Max(crop.width,crop.height);
             Rect rect=new Rect(center.x-crop.width*scale/2,center.y-crop.height*scale/2,crop.width*scale,crop.height*scale);
-            Rect uv=new Rect(crop.x/texture.width,1-crop.yMax/texture.height,crop.width/texture.width,crop.height/texture.height);
+            Rect uv=CropUv(crop,texture.width,texture.height);
             Color old=GUI.color;Matrix4x4 matrix=GUI.matrix;GUI.color=Color.white;
             GUI.matrix=GUI.matrix*GameLayout.RotationAround(center,rotation);
             GUI.DrawTextureWithTexCoords(rect,texture,uv,true);
@@ -309,26 +501,8 @@ namespace Naispo.Overhead
             GUI.DrawTextureWithTexCoords(new Rect(rect.xMax-radius,rect.yMax-radius,radius,radius),dot,new Rect(0.5f,0,0.5f,0.5f));
             GUI.color=old;
         }
-        void Cloud(float x,float y,float scale,Color color)
-        {
-            Oval(new Rect(x-86*scale,y-13*scale,172*scale,48*scale),color);
-            Circle(new Vector2(x-42*scale,y-7*scale),31*scale,color);
-            Circle(new Vector2(x+2*scale,y-18*scale),42*scale,color);
-            Circle(new Vector2(x+45*scale,y-3*scale),28*scale,color);
-        }
-        void DrawCloudFace()
-        {
-            float happy=Mathf.Max(0,cloudMood),sad=Mathf.Max(0,-cloudMood);
-            float amount=Mathf.Abs(cloudMood);
-            // Morph the same opaque strokes, so no separate face parts fade or pop apart.
-            for(int side=-1;side<=1;side+=2)
-                CloudFaceStroke(new Vector2(PivotX+side*22,202+sad*1.5f),
-                    happy*4.5f+sad*2,-happy*2.5f,side*sad*1.5f,
-                    Mathf.Lerp(6,3.4f,amount),Rgb(0xB2AA98));
-            CloudFaceStroke(new Vector2(PivotX,215.5f-cloudMood*3),
-                9+happy*2,cloudMood*7,0,Mathf.Lerp(5,3.4f,amount),Rgb(0xD6C4AA));
-        }
-        void CloudFaceStroke(Vector2 center,float halfWidth,float bend,float tilt,float width,Color color)
+        // A shared morphing stroke keeps the lantern's mouth from splitting into parts.
+        void FaceStroke(Vector2 center,float halfWidth,float bend,float tilt,float width,Color color)
         {
             Vector2 previous=center+new Vector2(-halfWidth,-tilt);
             for(int i=1;i<=12;i++)
@@ -338,39 +512,6 @@ namespace Naispo.Overhead
                 Capsule(previous,point,width,color);
                 previous=point;
             }
-        }
-        void Flower(float x,float y,float size,Color color)
-        {
-            Vector2 head=new Vector2(x,y),basePoint=head+new Vector2(0,54*size);
-            Matrix4x4 original=GUI.matrix;
-            try
-            {
-                GUI.matrix=original*GameLayout.RotationAround(basePoint,GardenAtmosphere.BreezeAngle(garden,playTime,x));
-                float bend=x<720 ? 3*size : -3*size;
-                Vector2 middle=head+new Vector2(bend,30*size);
-                Capsule(basePoint,middle,3.5f*size,leaf);
-                Capsule(middle,head,3.5f*size,leaf);
-                // Every part sways together around the same root.
-                FlowerLeaf(Vector2.Lerp(head,middle,0.83f),22*size,10*size,-28);
-                FlowerLeaf(Vector2.Lerp(middle,basePoint,0.35f),24*size,11*size,208);
-                for(int i=0;i<5;i++)
-                {
-                    float a=i*Mathf.PI*2/5-Mathf.PI/2;
-                    Circle(head+new Vector2(Mathf.Cos(a),Mathf.Sin(a))*10*size,8*size,color);
-                }
-                Circle(new Vector2(x,y),6*size,Rgb(0xFFF3CA));
-            }
-            finally { GUI.matrix=original; }
-        }
-        void FlowerLeaf(Vector2 attachment,float length,float width,float angle)
-        {
-            Matrix4x4 original=GUI.matrix;
-            try
-            {
-                GUI.matrix=original*GameLayout.RotationAround(attachment,angle);
-                Oval(new Rect(attachment.x-2,attachment.y-width/2,length+2,width),Rgb(0x89AF86));
-            }
-            finally { GUI.matrix=original; }
         }
         void Sparkle(Vector2 p,float radius,Color color)
         {
@@ -393,6 +534,17 @@ namespace Naispo.Overhead
         { Color old=GUI.color;GUI.color=color;GUI.DrawTexture(rect,Texture2D.whiteTexture);GUI.color=old; }
         void Oval(Rect rect,Color color)
         { Color old=GUI.color;GUI.color=color;GUI.DrawTexture(rect,dot);GUI.color=old; }
+        void Glow(Rect rect,Color color)
+        {
+            if(glow==null||rect.width<=0||rect.height<=0||color.a<=0)return;
+            Color old=GUI.color;
+            try
+            {
+                GUI.color=color;
+                GUI.DrawTexture(rect,glow,ScaleMode.StretchToFill,true);
+            }
+            finally { GUI.color=old; }
+        }
         void Circle(Vector2 p,float radius,Color color) => Oval(new Rect(p.x-radius,p.y-radius,radius*2,radius*2),color);
         void Capsule(Vector2 from,Vector2 to,float width,Color color)
         {
@@ -401,6 +553,24 @@ namespace Naispo.Overhead
             Fill(new Rect(from.x,from.y-width/2,delta.magnitude,width),color);
             GUI.matrix=old;Circle(from,width/2,color);Circle(to,width/2,color);
         }
+        static Rect CropUv(Rect crop,float sourceWidth,float sourceHeight)
+        {
+            return new Rect(crop.x/sourceWidth,1-crop.yMax/sourceHeight,
+                crop.width/sourceWidth,crop.height/sourceHeight);
+        }
+        static Rect BranchRect(Vector2 pivot)
+        {
+            return new Rect(pivot.x+(BranchCrop.x-BranchAnchor.x)*BranchScale,
+                pivot.y+(BranchCrop.y-BranchAnchor.y)*BranchScale,
+                360,BranchCrop.height*BranchScale);
+        }
+        static Vector2 BranchAnchorPoint(Rect rect)
+        {
+            return new Vector2(rect.x+(BranchAnchor.x-BranchCrop.x)*BranchScale,
+                rect.y+(BranchAnchor.y-BranchCrop.y)*BranchScale);
+        }
+        static Matrix4x4 BranchTransform(Vector2 pivot,float angle) =>
+            GameLayout.RotationAround(pivot,angle);
         static Rect Fit(Rect box,int width,int height)
         {
             float scale=Mathf.Min(box.width/width,box.height/height);

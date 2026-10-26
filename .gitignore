@@ -12,6 +12,10 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
+# Local model orchestration prompts and session output.
+/.orchestration/
+/work/orchestration-prompts/
+
 # Body Tracking model and downloaded SDK packages are restored by Setup-BodyTracking.cmd.
 /Setup/
 /Assets/StreamingAssets/AzureKinect/*.onnx

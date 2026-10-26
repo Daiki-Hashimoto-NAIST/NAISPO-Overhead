@@ -47,10 +47,11 @@ namespace Naispo.Overhead.Tests
             Assert.That(schedule.Advance(0.02f, 0, out _), Is.False);
             Assert.That(schedule.HasWarning, Is.True);
             Assert.That(schedule.Upcoming.Sequence, Is.EqualTo(1));
-            Assert.That(schedule.Upcoming.IsFish, Is.True);
+            ScheduledFoodDrop preview = schedule.Upcoming;
             Assert.That(schedule.Advance(0.64f, 0, out _), Is.False);
             Assert.That(schedule.Advance(0.02f, 0, out ScheduledFoodDrop drop), Is.True);
             Assert.That(drop.Sequence, Is.EqualTo(1));
+            AssertSame(drop, preview);
         }
 
         [Test]
@@ -112,7 +113,7 @@ namespace Naispo.Overhead.Tests
         }
 
         [Test]
-        public void ReadingAWarningDoesNotAdvanceTimeOrRerollItsPosition()
+        public void ReadingAWarningDoesNotAdvanceTimeOrRerollItsPositionOrType()
         {
             var schedule = Schedule();
             schedule.Advance(1, 0, out _);
@@ -130,22 +131,23 @@ namespace Naispo.Overhead.Tests
         }
 
         [Test]
-        public void ResetDiscardsTheWarningAndRestartsTheSequenceWithStrawberry()
+        public void ResetDiscardsTheWarningAndRestartsWithANewAdvertisedFood()
         {
             var schedule = Schedule();
             DropNext(schedule);
             schedule.Advance(2, 0, out _);
             schedule.Advance(0.6f, 0, out _);
             schedule.Reset();
+            ScheduledFoodDrop preview = schedule.Upcoming;
             Assert.That(schedule.SpawnedCount, Is.EqualTo(0));
             Assert.That(schedule.Upcoming.Sequence, Is.EqualTo(0));
-            Assert.That(schedule.Upcoming.IsFish, Is.False);
             Assert.That(schedule.HasWarning, Is.False);
             Assert.That(schedule.WarningProgress, Is.EqualTo(0));
             Assert.That(schedule.Advance(1, 0, out _), Is.False);
             Assert.That(schedule.Advance(0.64f, 0, out _), Is.False);
             Assert.That(schedule.Advance(0.02f, 0, out ScheduledFoodDrop drop), Is.True);
             Assert.That(drop.Sequence, Is.EqualTo(0));
+            AssertSame(drop, preview);
         }
 
         [Test]
@@ -159,7 +161,7 @@ namespace Naispo.Overhead.Tests
         }
 
         [Test]
-        public void SuppliedPatternRetainsThreeLaneCoverageAndFoodsAlternate()
+        public void SuppliedPositionPatternRetainsThreeLaneCoverage()
         {
             var schedule = Schedule();
             for (int group = 0; group < 4; group++)
@@ -170,13 +172,54 @@ namespace Naispo.Overhead.Tests
                     ScheduledFoodDrop drop = DropNext(schedule);
                     int sequence = group * 3 + i;
                     Assert.That(drop.Sequence, Is.EqualTo(sequence));
-                    Assert.That(drop.IsFish, Is.EqualTo(sequence % 2 == 1));
                     Assert.That(drop.XOffset, Is.InRange(-105f, 105f));
                     int lane = drop.XOffset < -45 ? 0 : drop.XOffset > 45 ? 2 : 1;
                     Assert.That(lanes[lane], Is.False);
                     lanes[lane] = true;
                 }
                 Assert.That(lanes, Is.All.True);
+            }
+        }
+
+        [Test]
+        public void FoodTypesAndDropPositionsUseIndependentRandomSequences()
+        {
+            var baseline = new FoodDropSchedule(new FoodSpawnPattern(72), typePattern: new FoodTypePattern(42));
+            var differentTypes = new FoodDropSchedule(new FoodSpawnPattern(72), typePattern: new FoodTypePattern(9));
+            var differentPositions = new FoodDropSchedule(new FoodSpawnPattern(9), typePattern: new FoodTypePattern(42));
+            bool sawDifferentType = false, sawDifferentPosition = false;
+            for (int i = 0; i < 48; i++)
+            {
+                ScheduledFoodDrop expected = DropNext(baseline);
+                ScheduledFoodDrop changedType = DropNext(differentTypes);
+                ScheduledFoodDrop changedPosition = DropNext(differentPositions);
+                Assert.That(changedType.XOffset, Is.EqualTo(expected.XOffset));
+                Assert.That(changedPosition.IsFish, Is.EqualTo(expected.IsFish));
+                sawDifferentType |= changedType.IsFish != expected.IsFish;
+                sawDifferentPosition |= changedPosition.XOffset != expected.XOffset;
+            }
+            Assert.That(sawDifferentType, Is.True);
+            Assert.That(sawDifferentPosition, Is.True);
+        }
+
+        [Test]
+        public void WarningReadsRestartsAndCapacityWaitsDoNotConsumeFutureFoods()
+        {
+            var interrupted = Schedule();
+            var uninterrupted = Schedule();
+            for (int i = 0; i < 16; i++)
+            {
+                Assert.That(interrupted.Advance(2, 0, out _), Is.False);
+                ScheduledFoodDrop preview = interrupted.Upcoming;
+                for (int read = 0; read < 5; read++) AssertSame(interrupted.Upcoming, preview);
+                Assert.That(interrupted.Advance(0.3f, 0, out _), Is.False);
+                interrupted.RestartWarning();
+                Assert.That(interrupted.Advance(100, 7, out _), Is.False);
+                Assert.That(interrupted.Advance(100, 7, out _), Is.False);
+                Assert.That(interrupted.Advance(0, 0, out _), Is.False);
+                Assert.That(interrupted.Advance(0.65f, 0, out ScheduledFoodDrop drop), Is.True);
+                AssertSame(drop, preview);
+                AssertSame(drop, DropNext(uninterrupted));
             }
         }
 
@@ -228,7 +271,7 @@ namespace Naispo.Overhead.Tests
             Assert.Throws<ArgumentException>(() => new FoodDropSchedule(null, interval, warning, first, capacity));
         }
 
-        static FoodDropSchedule Schedule() => new FoodDropSchedule(new FoodSpawnPattern(72));
+        static FoodDropSchedule Schedule() => new FoodDropSchedule(new FoodSpawnPattern(72), typePattern: new FoodTypePattern(42));
 
         static ScheduledFoodDrop DropNext(FoodDropSchedule schedule)
         {

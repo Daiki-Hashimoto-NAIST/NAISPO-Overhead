@@ -59,6 +59,9 @@ namespace Naispo.Overhead
         public static Texture2D CreateSparkle() =>
             CreateDistanceMask("NAISPO Sparkle",128,2,SparkleDistance);
 
+        public static Texture2D CreateMagicStar() =>
+            CreateDistanceMask("NAISPO Magic Star",128,2,MagicStarDistance);
+
         static Texture2D CreateDistanceMask(string name,int resolution,float displaySize,Func<Vector2,float> distance)
         {
             Color32[] pixels=WhitePixels(resolution*resolution);
@@ -91,6 +94,19 @@ namespace Naispo.Overhead
             float vertical=RoundedBoxDistance(rotated,new Vector2(0.36f,1),0.3f);
             float horizontal=RoundedBoxDistance(rotated,new Vector2(1,0.36f),0.3f);
             return Mathf.Min(vertical,horizontal);
+        }
+
+        static float MagicStarDistance(Vector2 point)
+        {
+            // Fold the four-point silhouette onto one edge. Bake it into one surface
+            // so even a small, fading star has no overlapping pieces or visible seams.
+            Vector2 folded=new Vector2(Mathf.Abs(point.x),Mathf.Abs(point.y));
+            if(folded.x>folded.y)folded=new Vector2(folded.y,folded.x);
+            Vector2 tip=new Vector2(0,0.94f),edge=new Vector2(0.20f,-0.74f);
+            Vector2 relative=folded-tip;
+            float t=Mathf.Clamp01(Vector2.Dot(relative,edge)/edge.sqrMagnitude);
+            float distance=(relative-edge*t).magnitude;
+            return edge.x*relative.y-edge.y*relative.x<0 ? -distance : distance;
         }
 
         static float RoundedBoxDistance(Vector2 point,Vector2 halfSize,float radius)

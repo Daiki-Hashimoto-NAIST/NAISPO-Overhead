@@ -11,11 +11,12 @@ namespace Naispo.Overhead
 
     /// <summary>
     /// Plans each food before showing its warning. Advance only while gameplay is running;
-    /// reading the preview does not advance time or consume random positions.
+    /// reading the preview does not advance time or consume random positions or food types.
     /// </summary>
     public sealed class FoodDropSchedule
     {
         readonly FoodSpawnPattern pattern;
+        readonly FoodTypePattern typePattern;
         readonly double interval, warningDuration, firstDelay;
         readonly int capacity;
         double delayRemaining, warningRemaining;
@@ -28,7 +29,8 @@ namespace Naispo.Overhead
             ? (float)Math.Max(0, Math.Min(1, 1 - warningRemaining / warningDuration)) : 0;
 
         public FoodDropSchedule(FoodSpawnPattern pattern = null, float intervalSeconds = 1.8f,
-            float warningSeconds = 0.65f, float firstDropDelaySeconds = 1f, int capacity = 7)
+            float warningSeconds = 0.65f, float firstDropDelaySeconds = 1f, int capacity = 7,
+            FoodTypePattern typePattern = null)
         {
             if (!Finite(intervalSeconds) || !Finite(warningSeconds) || !Finite(firstDropDelaySeconds)
                 || warningSeconds <= 0 || intervalSeconds < warningSeconds || firstDropDelaySeconds < 0
@@ -36,6 +38,7 @@ namespace Naispo.Overhead
                 throw new ArgumentException("Drop timing must be finite, with a positive warning, interval >= warning, nonnegative first delay, and positive capacity.");
 
             this.pattern = pattern ?? new FoodSpawnPattern();
+            this.typePattern = typePattern ?? new FoodTypePattern();
             interval = intervalSeconds;
             warningDuration = warningSeconds;
             firstDelay = firstDropDelaySeconds;
@@ -98,6 +101,7 @@ namespace Naispo.Overhead
             // Even a requested first delay shorter than the warning still gets a full warning.
             delayRemaining = Math.Max(0, firstDelay - warningDuration);
             pattern.Reset();
+            typePattern.Reset();
             PlanNext();
         }
 
@@ -113,7 +117,7 @@ namespace Naispo.Overhead
             {
                 Sequence = SpawnedCount,
                 XOffset = pattern.NextOffset(),
-                IsFish = SpawnedCount % 2 == 1
+                IsFish = typePattern.NextIsFish()
             };
         }
 

@@ -4,14 +4,22 @@ namespace Naispo.Overhead
 {
     public sealed partial class OverheadApp
     {
-        const float MonsterWidth=248,MonsterFeetY=730;
+        const float MonsterWidth=248,MonsterHeight=280,MonsterFeetY=730;
+        static readonly Vector2 LeftMouth=new Vector2(519,765),RightMouth=new Vector2(604,775);
 
         struct MonsterVisualPose
         {
             public Matrix4x4 Transform;
-            public float Height,Jump,Elapsed,GroundX;
+            public float Width,Height,Jump,Elapsed,GroundX;
             public int Expression;
             public bool Celebrating;
+        }
+
+        // Fit the supplied crop inside the spirit bounds without distorting it.
+        static Vector2 MonsterFit(Rect crop)
+        {
+            float scale=Mathf.Min(MonsterWidth/crop.width,MonsterHeight/crop.height);
+            return new Vector2(crop.width*scale,crop.height*scale);
         }
 
         void UpdateMonsterAttention(float dt)
@@ -77,6 +85,7 @@ namespace Naispo.Overhead
             float jump=0;
             int expression=0;
             float side=right ? -1 : 1;
+            Vector2 fit=MonsterFit(monster.Crop);
 
             if(reacting)
             {
@@ -132,12 +141,12 @@ namespace Naispo.Overhead
             }
             if(garden.IsComplete)expression=1;
             // Roll around the supporting edge of the feet rather than into the floor.
-            float supportLift=Mathf.Abs(Mathf.Sin(rotation*Mathf.Deg2Rad))*MonsterWidth*0.5f*sx;
+            float supportLift=Mathf.Abs(Mathf.Sin(rotation*Mathf.Deg2Rad))*fit.x*0.5f*sx;
             return new MonsterVisualPose
             {
                 Transform=Matrix4x4.TRS(new Vector3(centerX+shift,MonsterFeetY-jump-supportLift,0),
                     Quaternion.Euler(0,0,rotation),new Vector3(sx,sy,1)),
-                Height=MonsterWidth*monster.Crop.height/monster.Crop.width,
+                Width=fit.x,Height=fit.y,
                 GroundX=centerX+shift,Jump=jump,Elapsed=elapsed,Expression=expression,Celebrating=celebrating
             };
         }
@@ -151,16 +160,19 @@ namespace Naispo.Overhead
         static float MonsterHold(float time,float start,float riseEnd,float fallStart,float end) =>
             MonsterEase(time,start,riseEnd)*(1-MonsterEase(time,fallStart,end));
 
+        // Source pixels are in each supplied PNG's top-left space.
+        static Vector2 MonsterMouthLocal(Rect crop,Vector2 mouth)
+        {
+            float scale=MonsterFit(crop).x/crop.width;
+            return new Vector2((mouth.x-crop.center.x)*scale,(mouth.y-crop.yMax)*scale);
+        }
+
         // Returns game coordinates, before GameLayout.StageOffsetX and screen scaling.
         Vector2 MonsterMouthPosition(bool right)
         {
             Monster monster=right ? rightMonster : leftMonster;
             MonsterVisualPose pose=GetMonsterPose(monster,right,right ? 845 : 165);
-            // These positions were measured on the existing 1280px expression PNGs.
-            Vector2 pixel=pose.Expression==1 ? new Vector2(630,530)
-                : right ? new Vector2(627,pose.Expression==2 ? 578 : 562) : new Vector2(625,578);
-            float scale=MonsterWidth/monster.Crop.width;
-            Vector3 local=new Vector3((pixel.x-monster.Crop.center.x)*scale,(pixel.y-monster.Crop.yMax)*scale,0);
+            Vector2 local=MonsterMouthLocal(monster.Crop,right ? RightMouth : LeftMouth);
             return pose.Transform.MultiplyPoint3x4(local);
         }
 
@@ -174,14 +186,19 @@ namespace Naispo.Overhead
                 MonsterVisualPose pose=GetMonsterPose(monster,right,centerX);
                 Texture2D face=monster.Faces[pose.Expression];
                 if(face==null)face=monster.Faces[0];
-                if(face==null)return;
                 float shadowScale=1-pose.Jump/150;
                 Oval(new Rect(pose.GroundX-107*shadowScale,717,214*shadowScale,26),Rgb(0xA99B7D,0.18f-pose.Jump*0.0015f));
-                Rect crop=monster.Crop;
-                Rect uv=new Rect(crop.x/face.width,1-crop.yMax/face.height,crop.width/face.width,crop.height/face.height);
-                GUI.color=Color.white;
+                Rect body=new Rect(-pose.Width/2,-pose.Height,pose.Width,pose.Height);
                 GUI.matrix=originalMatrix*pose.Transform;
-                GUI.DrawTextureWithTexCoords(new Rect(-MonsterWidth/2,-pose.Height,MonsterWidth,pose.Height),face,uv,true);
+                if(face==null)
+                {
+                    Oval(body,WithAlpha(accent,0.80f));
+                }
+                else
+                {
+                    GUI.color=Color.white;
+                    GUI.DrawTextureWithTexCoords(body,face,CropUv(monster.Crop,face.width,face.height),true);
+                }
                 GUI.matrix=originalMatrix;
                 GUI.color=originalColor;
 

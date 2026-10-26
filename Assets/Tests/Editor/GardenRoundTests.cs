@@ -197,6 +197,10 @@ namespace Naispo.Overhead.Tests
         static T Get<T>(object instance,string field) =>
             (T)instance.GetType().GetField(field,Members).GetValue(instance);
 
+        static T Static<T>(string method,params object[] arguments) =>
+            (T)typeof(OverheadApp).GetMethod(method,BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+                .Invoke(null,arguments);
+
         static void Set(object instance,string field,object value) =>
             instance.GetType().GetField(field,Members).SetValue(instance,value);
     }

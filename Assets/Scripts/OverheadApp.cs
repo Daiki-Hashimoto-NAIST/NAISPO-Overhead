@@ -10,9 +10,10 @@ namespace Naispo.Overhead
         readonly List<Token> tokens=new List<Token>();
         readonly FoodDropSchedule dropSchedule=new FoodDropSchedule();
         readonly GardenProgress garden=new GardenProgress();
-        // Use one crop for all expressions of each character, with a little outline padding.
-        readonly Monster leftMonster=new Monster("Left",new Rect(177,232,901,866));
-        readonly Monster rightMonster=new Monster("Right",new Rect(190,134,875,1031));
+        // One shared source-pixel crop per spirit keeps all expressions at the same
+        // scale, including the few extra edge pixels in the supplied variants.
+        readonly Monster leftMonster=new Monster("Left",new Rect(34,156,956,1250));
+        readonly Monster rightMonster=new Monster("Right",new Rect(29,194,1135,1024));
         OverheadDepthSource source;
         GameAudio sounds;
         Texture2D dot, preview, strawberry, fish;
@@ -27,7 +28,7 @@ namespace Naispo.Overhead
         int misses;
         const float PivotX=505,PivotY=530,HalfArm=170,FoodSize=56;
         static readonly Vector2 Pivot=new Vector2(PivotX,PivotY);
-        static readonly Rect StrawberryCrop=new Rect(209,105,835,1051),FishCrop=new Rect(104,310,1062,646);
+        static readonly Rect StrawberryCrop=new Rect(236,127,783,1005),FishCrop=new Rect(49,355,1171,526);
         class Token
         {
             public Vector2 Position,Velocity;
@@ -46,12 +47,12 @@ namespace Naispo.Overhead
             public Monster(string side,Rect crop) { Side=side;Crop=crop; }
             public void Load()
             {
-                string[] names={"Normal","Satisfied","Confused"};
-                for(int i=0;i<names.Length;i++)
-                {
-                    Faces[i]=Resources.Load<Texture2D>("Monsters/"+Side+names[i]);
-                    if(Faces[i]==null) Debug.LogError("Missing monster texture: "+Side+names[i]);
-                }
+                Texture2D normal=Resources.Load<Texture2D>("Enchanted/"+Side+"Normal");
+                if(normal==null)Debug.LogError("Missing enchanted spirit texture: "+Side+"Normal");
+                Faces[0]=normal;
+                // Unprovided expressions retain the normal smile; never use old-theme art.
+                Faces[1]=Resources.Load<Texture2D>("Enchanted/"+Side+"Happy") ?? normal;
+                Faces[2]=Resources.Load<Texture2D>("Enchanted/"+Side+"Puzzled") ?? normal;
             }
             public void React(bool correct,float time) { Expression=correct ? 1 : 2;ReactedAt=time; }
             public void Reset() { Expression=0;ReactedAt=-100;LookDirection=Attention=0; }
@@ -62,10 +63,7 @@ namespace Naispo.Overhead
             Application.targetFrameRate=60;
             source=GetComponent<OverheadDepthSource>();
             sounds=gameObject.AddComponent<GameAudio>();
-            leftMonster.Load();rightMonster.Load();
-            strawberry=Resources.Load<Texture2D>("Food/Strawberry");
-            fish=Resources.Load<Texture2D>("Food/Fish");
-            if(strawberry==null||fish==null)Debug.LogError("Missing food texture: Strawberry or Fish");
+            LoadEnchantedArt();
             dot=new Texture2D(64,64,TextureFormat.RGBA32,false);
             for(int y=0;y<64;y++)for(int x=0;x<64;x++)
             {
@@ -74,6 +72,20 @@ namespace Naispo.Overhead
             }
             dot.Apply();
             InitializeArt();
+        }
+        void LoadEnchantedArt()
+        {
+            background=Resources.Load<Texture2D>("Enchanted/Background");
+            branch=Resources.Load<Texture2D>("Enchanted/Branch");
+            strawberry=Resources.Load<Texture2D>("Enchanted/Strawberry");
+            fish=Resources.Load<Texture2D>("Enchanted/Fish");
+            lantern=Resources.Load<Texture2D>("Enchanted/Lantern");
+            if(background==null)Debug.LogError("Missing enchanted texture: Background");
+            if(branch==null)Debug.LogError("Missing enchanted texture: Branch");
+            if(strawberry==null)Debug.LogError("Missing enchanted texture: Strawberry");
+            if(fish==null)Debug.LogError("Missing enchanted texture: Fish");
+            if(lantern==null)Debug.LogError("Missing enchanted texture: Lantern");
+            leftMonster.Load();rightMonster.Load();
         }
         void Update()
         {
@@ -237,11 +249,12 @@ namespace Naispo.Overhead
         void Calibrate() { analyzer.BeginCalibration(30);ready=false;hasAngle=false;ResetRound(); }
         void OnDestroy()
         {
-            DestroyGardenArt();
+            // The enchanted textures are Resources-owned; never destroy them here.
             DestroyMeadowArt();
             if(dot!=null)Destroy(dot);if(preview!=null)Destroy(preview);if(paper!=null)Destroy(paper);
-            if(warmPaper!=null)Destroy(warmPaper);
+            if(warmPaper!=null)Destroy(warmPaper);if(glow!=null)Destroy(glow);
             if(heartIcon!=null)Destroy(heartIcon);if(tangleIcon!=null)Destroy(tangleIcon);if(sparkleIcon!=null)Destroy(sparkleIcon);
+            if(magicStarIcon!=null)Destroy(magicStarIcon);
         }
     }
 
