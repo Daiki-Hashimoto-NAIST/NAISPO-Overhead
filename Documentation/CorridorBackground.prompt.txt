@@ -1,0 +1,31 @@
+CorridorBackground.png
+Generated: 2026-10-30
+Method: built-in image_gen tool, transparent_background=false
+Asset: Assets/Resources/Enchanted/CorridorBackground.png
+Dimensions: 1586 x 992
+
+Design:
+Keep the game in the foreground of a long glass-roofed conservatory passage.
+Ten pairs of lanterns shrink toward the painted vanishing point (720, 563).
+Every two arrived deliveries fully illuminate the next pair from near to far.
+Half-pair brightness after the first delivery provides continuous progress.
+Shared arrival progress avoids a dead end when only one spirit receives food.
+Camera, food physics, twenty-delivery goal and ten-delivery wake-up stay unchanged.
+Remove the old wall crest and foreground decorative star/floor overlays from display.
+Keep the central play corridor calm; brighten local architecture beside each lantern.
+
+Acceptance:
+Depth and progressive lights are visible at 0, 5, 10, 15 and 20 deliveries.
+Lighting waits for arrival, persists, pauses and resets with the game clock.
+Completion UI does not conceal all of the distant light trail.
+Food, branch and spirits remain easy to distinguish from the background.
+
+Prompt:
+Use case: stylized-concept.
+Asset type: final painted background for a children's magical sorting game, landscape aspect ratio exactly 16:10.
+Create a richly painted, welcoming but mysterious magical conservatory interior with extraordinary DEPTH: a broad empty foreground hall opens into a seemingly endless straight vaulted passage. The camera is completely fixed, straight down the center, approximately eye level. One-point perspective, vanishing point at precisely 50% image width and 40% image height. There is NO flat back wall, NO closed door, and no giant object blocking the passage. Repeated wooden and aged brass ribs, columns and archways get progressively smaller and closer together, disappearing into deep blue-green darkness at the central vanishing point. It should feel much longer than an ordinary room. Broad wooden floorboards flow toward that distant point; low dark wood wall bases and a strong clear floor-to-wall junction convey a walkable space.
+The UPPER part is an arched GLASS ROOF running away from the viewer over the whole long corridor, supported by rhythmic wooden ribs, with dark blue starry night and a soft small pale moon visible through the upper-left near glass pane (around x28%, y10%). This is an overhead barrel-vaulted skylight, NOT a flat row of upright windows at the far wall. The large nearest arch frames the image at both edges. Side columns / pilasters repeat in perspective along both side walls. Keep simple undecorated mounting surfaces on the columns: runtime lantern sprites will be added separately.
+Composition for game readability: foreground floor empty, generous quiet central negative space across x30%-70%, y28%-66% for bright falling food and a balancing branch. Architectural detail concentrated on the outer edges and glass ceiling. The distant corridor should be atmospheric and low contrast, not a bright central focal point. Do not place any plants or thin busy patterns across the center. Minimal ivy only at extreme outer edge corners, if any.
+Style: sophisticated hand-painted storybook fantasy, visible soft gouache/oil brushwork, warm brown timber with restrained antique brass joinery against deep petrol teal and midnight navy. Match a friendly painted brass lantern and soft round watercolor spirit characters. Not flat vector, not photorealism, not horror. Rich material detail and believable perspective, subtle wear, lovingly crafted architecture.
+Lighting: soft neutral cool night ambient exposure so the painted wood and glass have readable local detail that a game can dim/reveal later. Outer sides and foreground are moderately exposed; distance loses contrast and blends into dark teal haze. No golden illumination baked into the walls. No lit objects or hard beams.
+Strictly environment only. NO lanterns, NO lamps, NO chandeliers, NO candles (these will be game sprites); no wall crest, no emblem, no giant tree, no frame inside the scene, no furniture in the central aisle, no characters, no food, no HUD, no text, no labels. The passage ends in distant darkness, not in a white light, a garden, or a wall. Polished game environment illustration, 16:10 composition.

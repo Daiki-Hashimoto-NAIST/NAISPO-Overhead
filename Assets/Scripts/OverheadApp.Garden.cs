@@ -4,101 +4,29 @@ namespace Naispo.Overhead
 {
     public sealed partial class OverheadApp
     {
-        // Completion keeps the whole room breathing slowly without a screen-wide flash.
-        float FinaleBreath => garden.IsComplete ? Mathf.Sin(playTime*Mathf.PI*2f/6f)*0.02f : 0f;
+        Texture2D sleepBubbleIcon;
+        static readonly Vector2[] ButterflyAnchors={
+            new Vector2(505,214),new Vector2(932,198),new Vector2(382,238)
+        };
+        static readonly Color[] ButterflyColors={
+            Rgb(0xE79AAE),Rgb(0xF3D074),Rgb(0xB8A1D6)
+        };
 
-        // The room lights are presentation only: every value comes from the milestone
-        // timestamps already recorded by GardenProgress and the shared session clock.
+        // Completion keeps the whole room breathing slowly without a screen-wide flash.
+        float FinaleBreath => FinaleStarted ? Mathf.Sin(playTime*Mathf.PI*2f/6f)*0.02f : 0f;
+
+        // The room lights are presentation only: every value comes from the delivery records
+        // and the shared session clock.
         void DrawLanternRoom()
         {
             Matrix4x4 originalMatrix=GUI.matrix;
             Color originalColor=GUI.color;
             try
             {
-                DrawRoomAwakening();
-                DrawLanternSpills();
-                DrawSideLantern(false);
-                DrawSideLantern(true);
-                DrawSatelliteLanterns();
-                DrawArchLanterns();
+                DrawRoomFixtures();
                 DrawCentralLantern();
                 DrawLanternTravelers();
-            }
-            finally
-            {
-                GUI.matrix=originalMatrix;
-                GUI.color=originalColor;
-            }
-        }
-
-        void DrawLanternSpills()
-        {
-            LanternRoom.MilestoneLight left=LanternRoom.Evaluate(garden,0,playTime);
-            if(left.Brightness>0)
-                LanternSpill(LanternRoom.LeftGlass,174,210,left.Brightness);
-            LanternRoom.MilestoneLight right=LanternRoom.Evaluate(garden,1,playTime);
-            if(right.Brightness>0)
-                LanternSpill(LanternRoom.RightGlass,174,210,right.Brightness);
-            LanternRoom.MilestoneLight arch=LanternRoom.Evaluate(garden,2,playTime);
-            if(arch.Brightness<=0)return;
-            for(int i=0;i<LanternRoom.ArchGlasses.Length;i++)
-                LanternSpill(LanternRoom.ArchGlasses[i],32,32,arch.Brightness);
-        }
-
-        void LanternSpill(Vector2 glass,float width,float height,float brightness)
-        {
-            Glow(new Rect(glass.x-width*0.5f,glass.y-height*0.5f,width,height),
-                new Color(candle.r,candle.g,candle.b,0.10f*Mathf.Clamp01(brightness)));
-        }
-
-        void DrawSideLantern(bool right)
-        {
-            int stage=right ? 1 : 0;
-            LanternRoom.MilestoneLight light=LanternRoom.Evaluate(garden,stage,playTime);
-            Rect body=right ? LanternRoom.RightBody : LanternRoom.LeftBody;
-            Vector2 outer=right ? LanternRoom.RightBracketOuter : LanternRoom.LeftBracketOuter;
-            Vector2 inner=right ? LanternRoom.RightBracketInner : LanternRoom.LeftBracketInner;
-            Vector2 ring=LanternRoom.RingPoint(body);
-            Matrix4x4 originalMatrix=GUI.matrix;
-            Color originalColor=GUI.color;
-            try
-            {
-                GUI.matrix=originalMatrix;
-                GUI.color=Color.white;
-                // A short wall plate, bracket and chain make the hanging body read as fixed.
-                Rounded(new Rect(outer.x-5,outer.y-7,10,14),4,Rgb(0x493C35));
-                Capsule(outer,inner,2.6f,Rgb(0x92764B,0.90f));
-                Capsule(inner,ring,1.4f,Rgb(0x92764B,0.75f));
-                GUI.color=LanternRoom.Tint(light.Brightness);
-                DrawLanternBody(body);
-            }
-            finally
-            {
-                GUI.matrix=originalMatrix;
-                GUI.color=originalColor;
-            }
-        }
-
-        void DrawArchLanterns()
-        {
-            LanternRoom.MilestoneLight light=LanternRoom.Evaluate(garden,2,playTime);
-            Color tint=LanternRoom.Tint(light.Brightness);
-            Matrix4x4 originalMatrix=GUI.matrix;
-            Color originalColor=GUI.color;
-            try
-            {
-                GUI.matrix=originalMatrix;
-                for(int i=0;i<LanternRoom.ArchAnchors.Length;i++)
-                {
-                    Vector2 anchor=LanternRoom.ArchAnchors[i];
-                    Rect body=LanternRoom.ArchBodies[i];
-                    Vector2 ring=LanternRoom.RingPoint(body);
-                    GUI.color=Color.white;
-                    Rounded(new Rect(anchor.x-3,anchor.y-2,6,5),2,Rgb(0x493C35));
-                    Capsule(anchor,ring,1.1f,Rgb(0x92764B,0.80f));
-                    GUI.color=tint;
-                    DrawLanternBody(body);
-                }
+                if(FinaleStarted)DrawButterflies();
             }
             finally
             {
@@ -113,15 +41,22 @@ namespace Naispo.Overhead
             Color originalColor=GUI.color;
             try
             {
-                // Chain, fitting, body, ring, face and glow all share this one sway.
-                GUI.matrix=originalMatrix*LanternRoom.CentralTransform(playTime);
+                float light=GardenAtmosphere.Progress(garden,playTime);
+                Matrix4x4 pose=LanternRoom.CentralTransform(LanternTime,light);
+                // The ceiling fitting stays fixed while the chain follows the moving
+                // ring. Body, face and halo all share the same sway and final lift.
+                GUI.matrix=originalMatrix;
+                GUI.color=Color.white;
+                Rounded(new Rect(LanternRoom.Ceiling.x-6,LanternRoom.Ceiling.y-3,12,6),2,Rgb(0x493C35));
+                Vector2 ring=pose.MultiplyPoint3x4(LanternRoom.CentralRing);
+                Capsule(LanternRoom.Ceiling,ring,2.2f,Rgb(0x6B5A45,0.95f));
+                GUI.matrix=originalMatrix*pose;
                 GUI.color=Color.white;
                 Vector2 glass=LanternRoom.CentralGlass;
-                Glow(new Rect(glass.x-48,glass.y-54,96,108),
-                    new Color(candle.r,candle.g,candle.b,0.08f));
-                Rounded(new Rect(LanternRoom.Ceiling.x-6,LanternRoom.Ceiling.y-3,12,6),2,Rgb(0x493C35));
-                Capsule(LanternRoom.Ceiling,LanternRoom.CentralRing,2.2f,Rgb(0x6B5A45,0.95f));
-                GUI.color=LanternRoom.LitTint;
+                Glow(new Rect(glass.x-65,glass.y-72,130,144),
+                    new Color(candle.r,candle.g,candle.b,0.035f+light*0.23f));
+                // Dim at the intro and warm continuously as successes reach the room.
+                GUI.color=LanternRoom.Tint(0.23f+0.77f*light);
                 DrawLanternBody(LanternRoom.CentralBody);
                 DrawCentralLanternFace();
             }
@@ -135,21 +70,43 @@ namespace Naispo.Overhead
         void DrawCentralLanternFace()
         {
             Vector2 glass=LanternRoom.CentralGlass;
-            float mood=Mathf.Clamp(cloudMood,-1f,1f);
+            float wake=LanternRoom.WakeAmount(garden,playTime);
+            float mood=Mathf.Clamp(cloudMood,-1f,1f)*wake;
             float happy=Mathf.Max(0,mood),sad=Mathf.Max(0,-mood);
-            float blink=LanternRoom.BlinkAmount(playTime);
+            float drowsy=Mathf.Clamp01((1-wake)/0.35f);
+            float blink=LanternRoom.BlinkAmount(LanternTime,drowsy);
             Color face=Rgb(0x59433E);
-            // The same small brown face as the spirits: round eyes and a soft mouth.
+            // The first half of the round wakes the lantern; it watches the remaining
+            // deliveries with open eyes while the room continues to brighten.
             for(int side=-1;side<=1;side+=2)
             {
                 Vector2 eye=new Vector2(glass.x+side*12,glass.y-7-happy*1.2f+sad*1.4f);
-                if(blink>0.5f)
+                if(wake<0.06f||blink>0.5f)
                     Capsule(eye+new Vector2(-3.2f,0),eye+new Vector2(3.2f,0),2.4f,face);
                 else
-                    Circle(eye,3.1f-happy*0.5f,face);
+                {
+                    float height=Mathf.Lerp(2.4f,6.2f-happy,wake*wake);
+                    Oval(new Rect(eye.x-3.1f,eye.y-height*0.5f,6.2f,height),face);
+                    if(drowsy>0)
+                    {
+                        // A wider, drooping upper lid reads as sleepy even in a small window.
+                        Vector2 lid=eye-new Vector2(0,height*0.30f);
+                        Capsule(lid-new Vector2(4.6f,0),lid+new Vector2(4.6f,0),
+                            1.5f,WithAlpha(face,drowsy));
+                    }
+                }
             }
             FaceStroke(new Vector2(glass.x,glass.y+10+happy*0.5f-sad*1.0f),
-                8.5f+happy*1.5f,2.2f+mood*4.2f,0,2.4f,face);
+                Mathf.Lerp(6,8.5f,wake)+happy*1.5f,Mathf.Lerp(0.4f,2.2f,wake)+mood*4.2f,0,2.4f,face);
+
+            float bubble=1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(0.12f,0.50f,wake));
+            if(bubble>0)
+            {
+                float breath=LanternRoom.SleepBreath(LanternTime);
+                float size=Mathf.Lerp(22,30,breath);
+                DrawIcon(sleepBubbleIcon,glass+new Vector2(23,12),Vector2.one*size,
+                    Rgb(0xD4F1EF,bubble*0.90f));
+            }
         }
 
         void DrawLanternTravelers()
@@ -160,21 +117,53 @@ namespace Naispo.Overhead
             {
                 GUI.matrix=originalMatrix;
                 GUI.color=Color.white;
-                for(int stage=0;stage<GardenProgress.StageCount;stage++)
+                float progress=GardenAtmosphere.Progress(garden,playTime);
+                for(int i=0;i<garden.LightCount;i++)
                 {
-                    LanternRoom.MilestoneLight light=LanternRoom.Evaluate(garden,stage,playTime);
-                    if(!light.Started||light.Arrived)continue;
-                    Vector2 point=LanternRoom.TravelPoint(stage,light.TravelT,light.StartedAt);
-                    // One core and one halo, not a trail or a particle burst.
-                    Glow(new Rect(point.x-14,point.y-14,28,28),
-                        new Color(candle.r,candle.g,candle.b,0.18f));
-                    Circle(point,3.8f,Rgb(0xFFF3CC,0.95f));
+                    LanternRoom.LightFlight light=LanternRoom.Evaluate(garden,i,playTime);
+                    if(!light.Started)continue;
+                    if(!light.Arrived)
+                    {
+                        Vector2 point=LanternRoom.TravelPoint(light.Source,light.Right,light.TravelT,
+                            LanternTime,progress);
+                        // One core and one halo, not a trail or a particle burst.
+                        Glow(new Rect(point.x-14,point.y-14,28,28),
+                            new Color(candle.r,candle.g,candle.b,0.18f));
+                        Circle(point,3.8f,Rgb(0xFFF3CC,0.95f));
+                        continue;
+                    }
+                    float pulse=LanternRoom.ArrivalPulse(garden,i,playTime);
+                    if(pulse<=0)continue;
+                    Vector2 origin=LanternRoom.CentralGlassAt(LanternTime,progress);
+                    float age=Mathf.Max(0,light.Elapsed-LanternRoom.FlightDuration);
+                    float radius=Mathf.Lerp(12,47,Mathf.Clamp01(age/1.35f));
+                    Arc(origin,radius,radius*1.05f,0,360,28,1.6f,Rgb(0xFFE7A9,pulse*0.30f));
+                    Glow(new Rect(origin.x-57,origin.y-65,114,130),Rgb(0xFFD181,pulse*0.19f));
                 }
             }
             finally
             {
                 GUI.matrix=originalMatrix;
                 GUI.color=originalColor;
+            }
+        }
+
+        // Three soft native-shape butterflies appear at the windows only for the finale.
+        // Their anchors stay above and outside the central falling-food corridor.
+        void DrawButterflies()
+        {
+            for(int i=0;i<ButterflyAnchors.Length;i++)
+            {
+                Vector2 anchor=ButterflyAnchors[i];
+                float phase=playTime*(0.7f+i*0.13f)+i*1.7f;
+                float driftX=Mathf.Sin(phase*0.8f)*7f;
+                float driftY=Mathf.Cos(phase*0.62f)*4f;
+                float wing=3.5f+Mathf.Abs(Mathf.Cos(phase*2.1f))*4.5f;
+                Vector2 center=new Vector2(anchor.x+driftX,anchor.y+driftY);
+                Color wingColor=WithAlpha(ButterflyColors[i],0.58f);
+                Oval(new Rect(center.x-wing*2,center.y-wing,wing*2,wing*2),wingColor);
+                Oval(new Rect(center.x+0.5f,center.y-wing,wing*2,wing*2),wingColor);
+                Capsule(center-new Vector2(0,3),center+new Vector2(0,3),1.4f,Rgb(0x6B5A45,0.72f));
             }
         }
 
@@ -198,7 +187,7 @@ namespace Naispo.Overhead
     /// </summary>
     public static class LanternRoom
     {
-        public const float FlightDuration=1.10f;
+        public const float FlightDuration=GardenProgress.LightFlightDuration;
         public const float FadeDuration=0.65f;
         public const float SwayAmplitude=0.65f;
         public const float SwayPeriod=6.8f;
@@ -234,10 +223,6 @@ namespace Naispo.Overhead
         public static readonly Vector2[] ArchGlasses=BuildArchGlasses();
         public static readonly Vector2 ArchGlassTarget=ArchGlasses[2];
 
-        static readonly Vector2 LeftControl=new Vector2(470,190);
-        static readonly Vector2 RightControl=new Vector2(970,190);
-        static readonly Vector2 ArchControl=new Vector2(650,100);
-
         public static bool IsFinite(float value) => !float.IsNaN(value)&&!float.IsInfinity(value);
 
         public static float SwayDegrees(float playTime)
@@ -246,33 +231,52 @@ namespace Naispo.Overhead
             return SwayAmplitude*Mathf.Sin(Mathf.PI*2f*playTime/SwayPeriod);
         }
 
-        public static Matrix4x4 CentralTransform(float playTime) =>
-            GameLayout.RotationAround(Ceiling,SwayDegrees(playTime));
+        public static Matrix4x4 CentralTransform(float visualTime,float arrivedProgress=0)
+        {
+            float progress=IsFinite(arrivedProgress) ? Mathf.Clamp01(arrivedProgress) : 0;
+            float awake=Mathf.SmoothStep(0,1,Mathf.InverseLerp(0.95f,1,progress));
+            float bob=IsFinite(visualTime) ? Mathf.Sin(visualTime*Mathf.PI*2f/5.6f)*2f : 0;
+            return Matrix4x4.Translate(new Vector3(0,(-14+0.8f*bob)*awake,0))*
+                GameLayout.RotationAround(Ceiling,SwayDegrees(visualTime));
+        }
 
-        public static float BlinkAmount(float playTime)
+        public static Vector2 CentralGlassAt(float visualTime,float arrivedProgress=0) =>
+            CentralTransform(visualTime,arrivedProgress).MultiplyPoint3x4(CentralGlass);
+
+        public static float BlinkAmount(float playTime,float drowsiness=0)
         {
             if(!IsFinite(playTime))return 0;
+            float duration=Mathf.Lerp(BlinkDuration,0.52f,Mathf.Clamp01(drowsiness));
             float phase=Mathf.Repeat(playTime,BlinkPeriod);
-            if(phase>=BlinkDuration)return 0;
-            return Mathf.Sin(phase/BlinkDuration*Mathf.PI);
+            if(phase>=duration)return 0;
+            return Mathf.Sin(phase/duration*Mathf.PI);
         }
 
         public static Color Tint(float brightness) =>
             Color.Lerp(OffTint,Color.white,Mathf.Clamp01(brightness));
 
-        public static MilestoneLight Evaluate(GardenProgress garden,int stage,float playTime)
+        public static float WakeAmount(GardenProgress garden,float playTime)
         {
-            if(garden==null||stage<0||stage>=GardenProgress.StageCount)return default;
-            float startedAt=garden.BloomStartedAt(stage);
-            // Check both operands before subtraction so NaN or infinity can never leak in.
-            if(!IsFinite(startedAt)||!IsFinite(playTime))return default;
-            float elapsed=playTime-startedAt;
+            if(garden==null||!IsFinite(playTime))return 0;
+            float progress=GardenAtmosphere.Progress(garden,playTime);
+            return Mathf.SmoothStep(0,1,Mathf.InverseLerp(0.10f,0.50f,progress));
+        }
+
+        public static float SleepBreath(float time) =>
+            IsFinite(time) ? 0.5f-0.5f*Mathf.Cos(time*Mathf.PI*2f/3.8f) : 0.5f;
+
+        public static LightFlight Evaluate(GardenProgress garden,int index,float playTime)
+        {
+            if(garden==null||index<0||index>=garden.LightCount)return default;
+            var record=garden.LightAt(index);
+            if(!IsFinite(record.Time)||!IsFinite(playTime))return default;
+            float elapsed=playTime-record.Time;
             if(elapsed<0)return default;
             // Judge arrival against an absolute deadline on the game clock. Comparing
             // elapsed>=FlightDuration can miss an arrival exactly at the scheduled time
             // because the subtraction rounds (101.1f-100f == 1.09999847f < 1.10f).
             // The same deadline drives the fade so brightness stays 0 at arrival.
-            float arrivalAt=startedAt+FlightDuration;
+            float arrivalAt=record.Time+FlightDuration;
             bool hasDeadline=IsFinite(arrivalAt);
             bool arrived=hasDeadline ? playTime>=arrivalAt : elapsed>=FlightDuration;
             float fadeElapsed=hasDeadline ? playTime-arrivalAt : elapsed-FlightDuration;
@@ -280,17 +284,37 @@ namespace Naispo.Overhead
             float brightness=arrived
                 ? Mathf.SmoothStep(0,1,Mathf.Clamp01(fadeElapsed/FadeDuration))
                 : 0;
-            return new MilestoneLight(stage,startedAt,true,arrived,elapsed,travel,brightness);
+            return new LightFlight(index,record.Time,record.Right,record.Source,true,arrived,
+                elapsed,travel,brightness);
         }
 
-        public static Vector2 TravelPoint(int stage,float t,float startedAt)
+        /// <summary>A cubic path from a spirit's mouth to the central lantern's current glass.</summary>
+        public static Vector2 TravelPoint(Vector2 source,bool right,float t,
+            float visualTime=0,float arrivedProgress=0)
         {
-            Vector2 start=CentralTransform(startedAt)
-                .MultiplyPoint3x4(new Vector3(CentralGlass.x,CentralGlass.y,0));
-            Vector2 control=stage==0 ? LeftControl : stage==1 ? RightControl : ArchControl;
-            Vector2 end=stage==0 ? LeftGlass : stage==1 ? RightGlass : ArchGlassTarget;
+            Vector2 end=CentralGlassAt(visualTime,arrivedProgress);
+            // Rise beside the playfield, then approach the lantern above the falling food.
+            Vector2 control1=source+new Vector2(right ? 72f : -72f,-145f);
+            Vector2 control2=end+new Vector2(right ? 220f : -220f,50f);
             float u=Mathf.Clamp01(t),v=1-u;
-            return v*v*start+2*v*u*control+u*u*end;
+            return v*v*v*source+3*v*v*u*control1+3*v*u*u*control2+u*u*u*end;
+        }
+
+        public static Vector2 TravelPoint(GardenProgress garden,int index,float t,
+            float visualTime=0,float arrivedProgress=0)
+        {
+            if(garden==null||index<0||index>=garden.LightCount)return default;
+            var record=garden.LightAt(index);
+            return TravelPoint(record.Source,record.Right,t,visualTime,arrivedProgress);
+        }
+
+        public static float ArrivalPulse(GardenProgress garden,int index,float playTime)
+        {
+            var light=Evaluate(garden,index,playTime);
+            if(!light.Arrived)return 0;
+            float elapsed=Mathf.Max(0,light.Elapsed-FlightDuration);
+            if(elapsed>=1.35f)return 0;
+            return Mathf.Sin(elapsed/1.35f*Mathf.PI);
         }
 
         public static Vector2 SourcePoint(Vector2 source,Rect body)
@@ -337,17 +361,19 @@ namespace Naispo.Overhead
             return glasses;
         }
 
-        public readonly struct MilestoneLight
+        public readonly struct LightFlight
         {
-            public readonly int Stage;
+            public readonly int Index;
             public readonly float StartedAt,Elapsed,TravelT,Brightness;
-            public readonly bool Started,Arrived;
+            public readonly bool Right,Started,Arrived;
+            public readonly Vector2 Source;
 
-            public MilestoneLight(int stage,float startedAt,bool started,bool arrived,
-                float elapsed,float travelT,float brightness)
+            public LightFlight(int index,float startedAt,bool right,Vector2 source,
+                bool started,bool arrived,float elapsed,float travelT,float brightness)
             {
-                Stage=stage;StartedAt=startedAt;Started=started;Arrived=arrived;
-                Elapsed=elapsed;TravelT=travelT;Brightness=brightness;
+                Index=index;StartedAt=startedAt;Right=right;Source=source;
+                Started=started;Arrived=arrived;Elapsed=elapsed;TravelT=travelT;
+                Brightness=brightness;
             }
         }
     }

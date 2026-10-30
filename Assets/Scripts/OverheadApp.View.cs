@@ -15,7 +15,12 @@ namespace Naispo.Overhead
         static readonly Rect BranchCrop=new Rect(56,305,2062,113);
         static readonly Vector2 BranchAnchor=new Vector2(1086,362);
         static readonly float BranchScale=360/BranchCrop.width;
-        Texture2D paper,warmPaper,heartIcon,tangleIcon,sparkleIcon,magicStarIcon,glow,background,branch,lantern;
+        // The intro text is shared so repeated IMGUI passes do not allocate new strings.
+        const string IntroLineOne="ごはんの ひかりで";
+        const string IntroLineTwo="ランタンを おこそう！";
+        const string IntroStartLabel="はじめる";
+        static readonly Vector2 IntroSpiritBox=new Vector2(58,72);
+        Texture2D paper,heartIcon,tangleIcon,sparkleIcon,magicStarIcon,glow,background,branch,lantern;
         Font roundFont;
         GUIStyle label,button,sliderThumb;
 
@@ -24,15 +29,11 @@ namespace Naispo.Overhead
             roundFont=Resources.Load<Font>("Fonts/RoundedJapanese");
             if(roundFont==null)Debug.LogError("Missing rounded Japanese font");
             paper=new Texture2D(8,128,TextureFormat.RGBA32,false) { wrapMode=TextureWrapMode.Clamp };
-            warmPaper=new Texture2D(8,128,TextureFormat.RGBA32,false) { wrapMode=TextureWrapMode.Clamp };
             for(int y=0;y<128;y++)for(int x=0;x<8;x++)
             {
                 paper.SetPixel(x,y,Color.Lerp(nightBottom,nightTop,y/127f));
-                // A faint candle wash gathers near the floor and leaves the teal night intact.
-                warmPaper.SetPixel(x,y,new Color(candle.r,candle.g,candle.b,Mathf.Lerp(0.16f,0f,y/127f)));
             }
             paper.Apply();
-            warmPaper.Apply(false,true);
             // One shared radial falloff keeps every soft light free of a hard rim.
             glow=new Texture2D(64,64,TextureFormat.RGBA32,false)
             {
@@ -49,10 +50,12 @@ namespace Naispo.Overhead
                 glow.SetPixel(x,y,new Color(1,1,1,alpha));
             }
             glow.Apply(false,true);
+            InitializeRoomShade();
             heartIcon=GameIconArt.CreateHeart();
             tangleIcon=GameIconArt.CreateTangle();
             sparkleIcon=GameIconArt.CreateSparkle();
             magicStarIcon=GameIconArt.CreateMagicStar();
+            sleepBubbleIcon=GameIconArt.CreateSleepBubble();
         }
         void Styles()
         {
@@ -71,35 +74,37 @@ namespace Naispo.Overhead
             bool modal=settingsOpen||paused;
             GUI.enabled=!modal;
             DrawHeader();
-            GUI.enabled=true;
             Matrix4x4 canvas=GUI.matrix;
-            GUI.matrix=canvas*Matrix4x4.Translate(new Vector3(GameLayout.StageOffsetX,0,0));
-            DrawPlayfield();
-            GUI.matrix=canvas;
-            if(garden.IsComplete&&!Celebrating)
+            if(phase==GardenPhase.Intro)
+            {
+                DrawIntro();
+            }
+            else
             {
                 GUI.matrix=canvas*Matrix4x4.Translate(new Vector3(GameLayout.StageOffsetX,0,0));
-                DrawGardenComplete();
+                DrawPlayfield();
                 GUI.matrix=canvas;
+                if(phase==GardenPhase.Complete)
+                {
+                    GUI.matrix=canvas*Matrix4x4.Translate(new Vector3(GameLayout.StageOffsetX,0,0));
+                    DrawGardenComplete();
+                    GUI.matrix=canvas;
+                }
             }
+            GUI.enabled=true;
             if(settingsOpen)DrawSettings();
             else if(paused)DrawPause();
             GUI.matrix=original;
         }
         void DrawLandscape()
         {
-            float warmth=GardenAtmosphere.Warmth(garden,playTime);
+            float warmth=GardenAtmosphere.WallWarmth(garden,playTime);
             GUI.DrawTexture(new Rect(0,0,1440,900),paper);
             if(background!=null)
                 GUI.DrawTexture(Fit(new Rect(0,0,1440,900),background.width,background.height),
                     background,ScaleMode.StretchToFill,true);
-            Color originalColor=GUI.color;
-            try
-            {
-                GUI.color=new Color(1,1,1,warmth);
-                GUI.DrawTexture(new Rect(0,0,1440,900),warmPaper);
-            }
-            finally { GUI.color=originalColor; }
+            DrawRoomShade(warmth);
+            // RoomShade applies the local warm light as well; the exterior stays blue.
             // The room lights sit above the painted room and below the HUD and food.
             DrawLanternRoom();
         }
@@ -250,11 +255,54 @@ namespace Naispo.Overhead
             }
         }
 
+        void DrawIntro()
+        {
+            // A compact 560x340 card in canvas coordinates, above the painted room.
+            Card(new Rect(440,280,560,340),cream,32);
+            Text(new Rect(460,316,520,52),IntroLineOne,29,ink,TextAnchor.MiddleCenter);
+            Text(new Rect(460,360,520,52),IntroLineTwo,25,ink,TextAnchor.MiddleCenter);
+            // Use the supplied normal spirit art so the intro shows the same two characters.
+            DrawIntroSpirit(new Vector2(578,456),leftMonster,coral);
+            Oval(new Rect(612,436,68,40),cream);
+            DrawFood(new Vector2(646,456),false,42);
+            Oval(new Rect(760,436,68,40),cream);
+            DrawFood(new Vector2(794,456),true,42);
+            DrawIntroSpirit(new Vector2(862,456),rightMonster,cyan);
+            if(SoftButton(new Rect(600,536,240,58),IntroStartLabel,Rgb(0xE8BE6C)))RequestStart();
+        }
+
+        static Rect IntroSpiritRect(Vector2 center,Rect crop)
+        {
+            float scale=Mathf.Min(IntroSpiritBox.x/crop.width,IntroSpiritBox.y/crop.height);
+            return new Rect(center.x-crop.width*scale*0.5f,center.y-crop.height*scale*0.5f,
+                crop.width*scale,crop.height*scale);
+        }
+
+        void DrawIntroSpirit(Vector2 center,Monster monster,Color fallback)
+        {
+            Texture2D face=monster.Faces[0];
+            if(face==null) { Circle(center,26,fallback);return; }
+            Color old=GUI.color;
+            try
+            {
+                GUI.color=Color.white;
+                GUI.DrawTextureWithTexCoords(IntroSpiritRect(center,monster.Crop),face,
+                    CropUv(monster.Crop,face.width,face.height),true);
+            }
+            finally { GUI.color=old; }
+        }
+
         void DrawHeader()
         {
             Text(new Rect(64,53,180,35),"NAISPO",22,Rgb(0xBFD8CF));
+            if(phase==GardenPhase.Intro)
+            {
+                // The intro keeps only the settings entrance; no score or drop preview.
+                if(SoftButton(new Rect(1308,46,91,64),"せってい",cream)) { settingsOpen=true;draggingGate=false; }
+                return;
+            }
             Card(new Rect(960,46,196,64),cream,22);
-            float celebrationPulse=Celebrating ? Mathf.Sin((playTime-celebrationAt)*6)*3 : 0;
+            float celebrationPulse=Celebrating ? Mathf.Sin((playTime-FinaleStart)*6)*3 : 0;
             Sparkle(new Vector2(997,78),18+celebrationPulse,Rgb(0xE6B450));
             Text(new Rect(1027,50,119,56),$"{score} / {GardenProgress.Goal}",28,ink,TextAnchor.MiddleLeft);
             if(SoftButton(new Rect(1180,46,116,64),"ひとやすみ",cream)) { paused=true;draggingGate=false; }
@@ -267,36 +315,49 @@ namespace Naispo.Overhead
             DrawMonster(rightMonster,845,cyan,true);
             DrawFavorite(165,false);
             DrawFavorite(845,true);
-            DrawStickGlow();
-            if(garden.IsComplete)return;
+            if(phase!=GardenPhase.Playing) { DrawStickGlow();return; }
             float displayAngle=Mathf.Repeat(angle+90,180)-90;
-            if(branch==null)
+            float lightBreath=1+Mathf.Sin(playTime*1.7f)*0.04f;
+            Color oldColor=GUI.color;
+            Matrix4x4 oldMatrix=GUI.matrix;
+            try
             {
-                Vector2 axis=new Vector2(Mathf.Cos(displayAngle*Mathf.Deg2Rad),Mathf.Sin(displayAngle*Mathf.Deg2Rad));
-                Capsule(Pivot-axis*HalfArm,Pivot+axis*HalfArm,20,Rgb(0x493C35));
-            }
-            else
-            {
-                Color oldColor=GUI.color;
-                Matrix4x4 oldMatrix=GUI.matrix;
-                try
+                GUI.matrix=oldMatrix*BranchTransform(Pivot,displayAngle);
+                DrawBranchEmission(Pivot,lightBreath);
+                if(branch==null)
+                    Capsule(Pivot-Vector2.right*HalfArm,Pivot+Vector2.right*HalfArm,20,Rgb(0x493C35));
+                else
                 {
                     GUI.color=Color.white;
-                    GUI.matrix=oldMatrix*BranchTransform(Pivot,displayAngle);
                     GUI.DrawTextureWithTexCoords(BranchRect(Pivot),branch,
                         CropUv(BranchCrop,branch.width,branch.height),true);
                 }
-                finally { GUI.matrix=oldMatrix;GUI.color=oldColor; }
+                // The amber center remains the light source without washing out the wood.
+                Glow(new Rect(Pivot.x-17,Pivot.y-17,34,34),Rgb(0xFFE6A5,0.62f*lightBreath));
+                Glow(new Rect(Pivot.x-6,Pivot.y-6,12,12),Rgb(0xFFF8DF,0.75f*lightBreath));
             }
+            finally { GUI.matrix=oldMatrix;GUI.color=oldColor; }
+            // The contact flash stays visible above the steady aura and below the food.
+            DrawStickGlow();
             foreach(var token in tokens)DrawAnimatedFood(token);
             DrawFoodFeedback();
-            if(!ready&&!Celebrating)
+            if(!ready)
             {
                 string prompt=source.Starting||(!front&&analyzer.CalibrationFramesRemaining>0)
                     ? "じゅんび しているよ…" : front ? FrontPrompt() : "りょうてを ひろげてみよう";
                 Rounded(new Rect(315,353,380,67),24,cream);
                 Text(new Rect(330,364,350,43),prompt,21,muted,TextAnchor.MiddleCenter);
             }
+        }
+        void DrawBranchEmission(Vector2 pivot,float breath)
+        {
+            // Reuse the same small soft texture along the branch: the light follows
+            // its exact rotation, with no image processing or new textures per frame.
+            Glow(new Rect(pivot.x-260,pivot.y-100,520,200),Rgb(0xEBAC57,0.24f*breath));
+            Color warmth=Rgb(0xF6C36E,0.64f*breath);
+            for(int i=-2;i<=2;i++)
+                Glow(new Rect(pivot.x+i*70-84,pivot.y-58,168,116),warmth);
+            Glow(new Rect(pivot.x-59,pivot.y-59,118,118),Rgb(0xFFD990,0.32f*breath));
         }
         void DrawStickGlow()
         {
@@ -326,10 +387,10 @@ namespace Naispo.Overhead
         void DrawGardenComplete()
         {
             Card(new Rect(PivotX-205,348,410,188),cream,30);
-            Text(new Rect(PivotX-185,372,370,48),"あかりが ともった！",30,ink,TextAnchor.MiddleCenter);
+            Text(new Rect(PivotX-185,372,370,48),"ランタンが おきた！",30,ink,TextAnchor.MiddleCenter);
             bool enabled=GUI.enabled;
             GUI.enabled=enabled&&!settingsOpen&&!paused;
-            if(SoftButton(new Rect(PivotX-114,448,228,58),"もういちど",Rgb(0xD6E7CD)))ResetRound();
+            if(SoftButton(new Rect(PivotX-114,448,228,58),"もういちど",Rgb(0xD6E7CD)))RestartRound();
             GUI.enabled=enabled;
         }
         void DrawFavorite(float centerX,bool isFish)
@@ -434,6 +495,9 @@ namespace Naispo.Overhead
             if(SoftButton(new Rect(724,652,190,43),mirror ? "左右反転：オン" : "左右反転：オフ",Rgb(0xF3EAD7)))mirror=!mirror;
             if(SoftButton(new Rect(928,652,190,43),invert ? "回転反転：オン" : "回転反転：オフ",Rgb(0xF3EAD7)))invert=!invert;
             if(SoftButton(new Rect(300,744,206,48),"はじめから",Rgb(0xF3EAD7)))ResetRound();
+            GUI.enabled=!displayChanging;
+            if(SoftButton(new Rect(530,744,310,48),DisplayButtonLabel,Rgb(0xF3EAD7)))ToggleDisplay();
+            GUI.enabled=true;
             if(SoftButton(new Rect(865,738,253,59),"あそびに もどる",Rgb(0xD6E7CD))) { settingsOpen=false;paused=false;draggingGate=false; }
         }
         Vector2 PreviewPoint(Vector2 point,Rect fitted)

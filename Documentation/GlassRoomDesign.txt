@@ -1,0 +1,57 @@
+Glass room / lantern awakening
+2026-10-30
+
+Background: Assets/Resources/Enchanted/GlassRoomBackground.png
+Source: user-provided image, copied without editing, 1586 x 992 pixels.
+SHA256: 736210DBE9921B50929C165180D930C4A7972F13B8CAD8A70E71BFB9D395D863
+
+The spirits' food creates light that reaches the sleeping central lantern.
+At ten arrived deliveries it opens its eyes. The twentieth gives it enough
+light to float gently, illuminating its home. The camera remains fixed.
+
+The supplied glass room replaces the experimental corridor. Four side lamps
+are mounted on the painted wooden columns in two symmetric pairs. They grow
+brighter as the central lamp gathers energy; there is no receding lamp trail.
+
+Keep the outdoor sky, moon and distant scenery cool blue throughout the round.
+Start the indoor wood, floor and foliage very dark. Reveal their warm colors
+locally as the lanterns brighten, retaining detail at the end. Mask both dark
+and warm overlays to the architecture, with soft transitions at the floor.
+Food, spirits, branch and controls remain above those background overlays.
+
+The spirits and branch emit their own light, explaining their visibility before
+the room lamps wake. Each spirit has a pale close rim, broad colored light that
+diffuses into the air, and a visible floor reflection. The branch has a broad
+amber aura and a luminous center gem. A slow, small brightness variation suggests
+living magic, without drawn rays, flashing or extra particles.
+The halo shares the exact expression crop and animated pose, including the taller
+leaf of the left happy face. The food and faces retain their painted detail.
+
+Keep the twenty-delivery goal, ten-delivery wake-up, shared session clock,
+Kinect modes, food physics and balanced random food order. Every light uses
+its recorded spirit-mouth source and lands at the moving central glass.
+Pause freezes all progress; replay removes the earned light and final lift.
+
+Lighting performance:
+Sample the fixed architecture and lamp falloff once at startup. Keep the
+288 x 180 mask buffers and update only their brightness at a new exposure
+step during Repaint. Do not recalculate geometry on a successful delivery.
+RoomLightingCache is checked against the original analytic evaluator at all
+257 exposure steps. Run Overhead / Measure room lighting in Unity to compare
+CPU pixel-update time and texture API time; this is not a game FPS benchmark.
+
+Prepare a close and broad alpha halo for each of the six expressions once at
+startup, using half-resolution crops, padded blur and non-readable final textures.
+The 64-pixel padding exceeds the combined 54-pixel blur support. Never read back,
+blur, allocate or upload these textures during play. Branch and floor light reuse
+the existing radial texture. Contact feedback is drawn above the steady branch
+aura and below food, so it remains visible.
+
+Acceptance:
+- The supplied background is loaded at its original aspect ratio and resolution.
+- Start and finish show a clear contrast on floor/columns, without whitening sky.
+- The four side lamps align with the room's architecture and avoid the play area.
+- Both spirits send light to the central lamp even while it sways and lifts.
+- The lantern, face and glow move together; the ceiling attachment stays fixed.
+- Food, characters, preview and controls remain readable at every stage.
+- Arrivals, pause and replay have no early or persistent lighting regressions.

@@ -62,6 +62,29 @@ namespace Naispo.Overhead
         public static Texture2D CreateMagicStar() =>
             CreateDistanceMask("NAISPO Magic Star",128,2,MagicStarDistance);
 
+        // Rim, soft fill, tail and highlight are baked together so breathing/fading
+        // cannot expose overlaps between separate pieces of a nose bubble.
+        public static Texture2D CreateSleepBubble()
+        {
+            const int resolution=96;
+            const float displaySize=28;
+            float scale=resolution/displaySize;
+            Color32[] pixels=WhitePixels(resolution*resolution);
+            for(int y=0;y<resolution;y++)for(int x=0;x<resolution;x++)
+            {
+                Vector2 p=new Vector2((x+0.5f)/scale-14,14-(y+0.5f)/scale);
+                float radius=(p-new Vector2(1,-1)).magnitude;
+                float fill=Coverage((radius-10)*scale)*0.16f;
+                float rim=Coverage((Mathf.Abs(radius-10)-0.65f)*scale)*0.83f;
+                float highlight=Coverage((Vector2.Distance(p,new Vector2(-3,-6))-1.4f)*scale)*0.9f;
+                Vector2 tailStart=new Vector2(-12,5),tail=new Vector2(5,-2);
+                float t=Mathf.Clamp01(Vector2.Dot(p-tailStart,tail)/tail.sqrMagnitude);
+                float stem=Coverage(((p-tailStart-tail*t).magnitude-0.6f)*scale)*0.83f;
+                pixels[y*resolution+x].a=(byte)Mathf.RoundToInt(Mathf.Max(Mathf.Max(fill,rim),Mathf.Max(highlight,stem)));
+            }
+            return CreateTexture("NAISPO Sleep Bubble",resolution,resolution,pixels);
+        }
+
         static Texture2D CreateDistanceMask(string name,int resolution,float displaySize,Func<Vector2,float> distance)
         {
             Color32[] pixels=WhitePixels(resolution*resolution);

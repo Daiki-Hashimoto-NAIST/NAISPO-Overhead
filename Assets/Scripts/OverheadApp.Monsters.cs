@@ -6,6 +6,10 @@ namespace Naispo.Overhead
     {
         const float MonsterWidth=248,MonsterHeight=280,MonsterFeetY=730;
         static readonly Vector2 LeftMouth=new Vector2(519,765),RightMouth=new Vector2(604,775);
+        // The happy drawing has a taller leaf and feet 12 source pixels higher.
+        // Keep the normal drawing's pixel scale and align the feet instead of refitting it.
+        static readonly Rect LeftHappyCrop=new Rect(28,80,970,1316);
+        static readonly Vector2 LeftHappyOffset=new Vector2(0,12);
 
         struct MonsterVisualPose
         {
@@ -20,6 +24,13 @@ namespace Naispo.Overhead
         {
             float scale=Mathf.Min(MonsterWidth/crop.width,MonsterHeight/crop.height);
             return new Vector2(crop.width*scale,crop.height*scale);
+        }
+
+        static Rect MonsterFaceRect(Rect reference,Rect source,Vector2 offset)
+        {
+            float scale=MonsterFit(reference).x/reference.width;
+            return new Rect((source.x-reference.center.x+offset.x)*scale,
+                (source.y-reference.yMax+offset.y)*scale,source.width*scale,source.height*scale);
         }
 
         void UpdateMonsterAttention(float dt)
@@ -66,10 +77,11 @@ namespace Naispo.Overhead
         MonsterVisualPose GetMonsterPose(Monster monster,bool right,float centerX)
         {
             float elapsed=playTime-monster.ReactedAt;
-            float celebration=playTime-celebrationAt;
-            bool celebrating=celebration>=0&&celebration<CelebrationDuration;
+            // The shared celebration begins only when the final light reaches its wall lamp.
+            float celebration=playTime-FinaleStart;
+            bool celebrating=celebration>=0&&celebration<GardenAtmosphere.FinaleDuration;
             float celebrationEnvelope=celebrating
-                ? MonsterHold(celebration,0,0.2f,CelebrationDuration-0.3f,CelebrationDuration) : 0;
+                ? MonsterHold(celebration,0,0.2f,GardenAtmosphere.FinaleDuration-0.3f,GardenAtmosphere.FinaleDuration) : 0;
             float reactionWeight=celebrating ? 1-MonsterEase(celebration,0,0.2f) : 1;
             bool reacting=elapsed>=0&&elapsed<2.25f&&monster.Expression!=0;
             float phase=right ? 1.7f : 0;
@@ -139,7 +151,8 @@ namespace Naispo.Overhead
                     sx-=contentment*0.003f;sy+=contentment*0.006f;
                 }
             }
-            if(garden.IsComplete)expression=1;
+            // Keep the ordinary reaction until the final light arrives; only then do both smile.
+            if(FinaleStarted)expression=1;
             // Roll around the supporting edge of the feet rather than into the floor.
             float supportLift=Mathf.Abs(Mathf.Sin(rotation*Mathf.Deg2Rad))*fit.x*0.5f*sx;
             return new MonsterVisualPose
@@ -188,8 +201,10 @@ namespace Naispo.Overhead
                 if(face==null)face=monster.Faces[0];
                 float shadowScale=1-pose.Jump/150;
                 Oval(new Rect(pose.GroundX-107*shadowScale,717,214*shadowScale,26),Rgb(0xA99B7D,0.18f-pose.Jump*0.0015f));
+                DrawSpiritFloorLight(pose,right);
                 Rect body=new Rect(-pose.Width/2,-pose.Height,pose.Width,pose.Height);
                 GUI.matrix=originalMatrix*pose.Transform;
+                DrawSpiritHalo(pose,right);
                 if(face==null)
                 {
                     Oval(body,WithAlpha(accent,0.80f));
@@ -197,7 +212,10 @@ namespace Naispo.Overhead
                 else
                 {
                     GUI.color=Color.white;
-                    GUI.DrawTextureWithTexCoords(body,face,CropUv(monster.Crop,face.width,face.height),true);
+                    bool leftHappy=!right&&pose.Expression==1&&face!=monster.Faces[0];
+                    Rect source=leftHappy ? LeftHappyCrop : monster.Crop;
+                    Rect sprite=MonsterFaceRect(monster.Crop,source,leftHappy ? LeftHappyOffset : Vector2.zero);
+                    GUI.DrawTextureWithTexCoords(sprite,face,CropUv(source,face.width,face.height),true);
                 }
                 GUI.matrix=originalMatrix;
                 GUI.color=originalColor;

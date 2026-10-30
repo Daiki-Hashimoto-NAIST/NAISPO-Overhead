@@ -31,19 +31,20 @@ namespace Naispo.Overhead.Tests
         {
             Invoke("LoadEnchantedArt");
 
-            AssertTexture("background","Background",1586,992);
+            AssertTexture("background","GlassRoomBackground",1586,992);
             AssertTexture("branch","Branch",2172,724);
             AssertTexture("strawberry","Strawberry",1254,1254);
             AssertTexture("fish","Fish",1254,1254);
             AssertTexture("lantern","Lantern",1254,1254);
             AssertSpiritTexture("leftMonster","LeftNormal",1024,1536);
+            AssertSpiritTexture("leftMonster","LeftHappy",1024,1536,1);
             AssertSpiritTexture("rightMonster","RightNormal",1190,1322);
             AssertSpiritTexture("leftMonster","LeftPuzzled",1024,1536,2);
             AssertSpiritTexture("rightMonster","RightHappy",1190,1322,1);
             AssertSpiritTexture("rightMonster","RightPuzzled",1189,1323,2);
 
-            foreach(string name in new[]{"Background","Branch","LeftNormal","RightNormal",
-                "LeftPuzzled","RightHappy","RightPuzzled","Strawberry","Fish","Lantern"})
+            foreach(string name in new[]{"GlassRoomBackground","Branch","LeftNormal","RightNormal",
+                "LeftHappy","LeftPuzzled","RightHappy","RightPuzzled","Strawberry","Fish","Lantern"})
             {
                 var importer=(TextureImporter)AssetImporter.GetAtPath("Assets/Resources/Enchanted/"+name+".png");
                 Assert.That(importer,Is.Not.Null,name);
@@ -60,12 +61,43 @@ namespace Naispo.Overhead.Tests
         }
 
         [Test]
-        public void SuppliedExpressionsLoadAndUnprovidedLeftHappyKeepsTheNormalSmile()
+        public void BothSpiritsLoadNormalHappyAndPuzzledExpressions()
         {
             Invoke("LoadEnchantedArt");
 
-            AssertFaces("leftMonster","LeftNormal","LeftNormal","LeftPuzzled");
+            AssertFaces("leftMonster","LeftNormal","LeftHappy","LeftPuzzled");
             AssertFaces("rightMonster","RightNormal","RightHappy","RightPuzzled");
+        }
+
+        [Test]
+        public void LeftHappyKeepsItsLeafAndAlignsFeetAndMouthWithoutRescalingTheBody()
+        {
+            Rect reference=Get<Rect>(Get<object>(app,"leftMonster"),"Crop");
+            const BindingFlags shared=BindingFlags.Static|BindingFlags.NonPublic;
+            Rect source=(Rect)typeof(OverheadApp).GetField("LeftHappyCrop",shared).GetValue(null);
+            Vector2 offset=(Vector2)typeof(OverheadApp).GetField("LeftHappyOffset",shared).GetValue(null);
+            Rect sprite=Static<Rect>("MonsterFaceRect",reference,source,offset);
+            float scale=Static<Vector2>("MonsterFit",reference).x/reference.width;
+
+            // Measured visible bounds: (30,83)-(994,1393). Only three alpha=1 pixels lie outside.
+            Assert.That(source.xMin,Is.LessThanOrEqualTo(30));
+            Assert.That(source.yMin,Is.LessThanOrEqualTo(83));
+            Assert.That(source.xMax,Is.GreaterThanOrEqualTo(994));
+            Assert.That(source.yMax,Is.GreaterThanOrEqualTo(1393));
+            Assert.That(sprite.width/source.width,Is.EqualTo(scale).Within(0.000001f));
+            Assert.That(sprite.height/source.height,Is.EqualTo(scale).Within(0.000001f));
+            Assert.That(sprite.y+(1394-source.y)*scale,Is.EqualTo(0).Within(0.3f),
+                "Happy feet must remain on the normal drawing's baseline.");
+            Vector2 happyMouth=sprite.position+(new Vector2(516,753)-source.position)*scale;
+            Vector2 normalMouth=Static<Vector2>("MonsterMouthLocal",reference,new Vector2(519,765));
+            Assert.That(Vector2.Distance(happyMouth,normalMouth),Is.LessThan(1f));
+
+            Vector2 fit=Static<Vector2>("MonsterFit",reference);
+            Rect normal=Static<Rect>("MonsterFaceRect",reference,reference,Vector2.zero);
+            Assert.That(normal.x,Is.EqualTo(-fit.x/2).Within(0.0001f));
+            Assert.That(normal.y,Is.EqualTo(-fit.y).Within(0.0001f));
+            Assert.That(normal.width,Is.EqualTo(fit.x).Within(0.0001f));
+            Assert.That(normal.height,Is.EqualTo(fit.y).Within(0.0001f));
         }
 
         [Test]

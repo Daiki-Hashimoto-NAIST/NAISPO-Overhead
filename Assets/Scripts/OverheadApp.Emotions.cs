@@ -7,7 +7,7 @@ namespace Naispo.Overhead
         void DrawMonsterEmotion(MonsterVisualPose pose,float centerX)
         {
             if(!pose.Celebrating&&pose.Expression==0)return;
-            float celebration=playTime-celebrationAt;
+            float celebration=playTime-FinaleStart;
             float elapsed=pose.Celebrating ? celebration-0.35f : pose.Elapsed-0.18f;
             float remaining=pose.Celebrating ? (garden.IsComplete ? 2.6f : 1.8f)-celebration : 2.25f-pose.Elapsed;
             float appear=Mathf.SmoothStep(0,1,Mathf.Clamp01(elapsed/0.25f));

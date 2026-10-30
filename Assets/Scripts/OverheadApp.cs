@@ -10,8 +10,10 @@ namespace Naispo.Overhead
         readonly List<Token> tokens=new List<Token>();
         readonly FoodDropSchedule dropSchedule=new FoodDropSchedule();
         readonly GardenProgress garden=new GardenProgress();
-        // One shared source-pixel crop per spirit keeps all expressions at the same
-        // scale, including the few extra edge pixels in the supplied variants.
+        GardenPhase phase=GardenPhase.Intro;
+        bool startRequested;
+        // One reference crop per spirit keeps all expressions at the same pixel scale.
+        // The taller leaf in LeftHappy is drawn beyond this frame without shrinking its body.
         readonly Monster leftMonster=new Monster("Left",new Rect(34,156,956,1250));
         readonly Monster rightMonster=new Monster("Right",new Rect(29,194,1135,1024));
         OverheadDepthSource source;
@@ -21,6 +23,9 @@ namespace Naispo.Overhead
         bool previewMirrored;
         bool live, table, front, mirror=true, invert, ready, hasAngle, paused, settingsOpen, draggingGate;
         float minHeight=300,maxHeight=2200,angle,targetAngle,lastFrameAt=-100,playTime;
+        // Intro breathing has its own offset; it never advances food, light flights or scoring.
+        float introLanternTime;
+        float LanternTime => playTime+introLanternTime;
         float minDistance=700,maxDistance=3500;
         FrontPose frontPose;
         HandLineResult handLine;
@@ -72,15 +77,16 @@ namespace Naispo.Overhead
             }
             dot.Apply();
             InitializeArt();
+            InitializeSpiritEmission();
         }
         void LoadEnchantedArt()
         {
-            background=Resources.Load<Texture2D>("Enchanted/Background");
+            background=Resources.Load<Texture2D>("Enchanted/GlassRoomBackground");
             branch=Resources.Load<Texture2D>("Enchanted/Branch");
             strawberry=Resources.Load<Texture2D>("Enchanted/Strawberry");
             fish=Resources.Load<Texture2D>("Enchanted/Fish");
             lantern=Resources.Load<Texture2D>("Enchanted/Lantern");
-            if(background==null)Debug.LogError("Missing enchanted texture: Background");
+            if(background==null)Debug.LogError("Missing enchanted texture: GlassRoomBackground");
             if(branch==null)Debug.LogError("Missing enchanted texture: Branch");
             if(strawberry==null)Debug.LogError("Missing enchanted texture: Strawberry");
             if(fish==null)Debug.LogError("Missing enchanted texture: Fish");
@@ -91,12 +97,14 @@ namespace Naispo.Overhead
         {
             float dt=Mathf.Min(Time.deltaTime,0.05f);
             var keyboard=Keyboard.current;
+            UpdateDisplay(keyboard!=null&&keyboard.f11Key.wasPressedThisFrame);
             if(keyboard!=null&&keyboard.escapeKey.wasPressedThisFrame)
             {
                 if(settingsOpen)settingsOpen=false;
                 else paused=!paused;
                 draggingGate=false;
             }
+            // Depth capture, calibration and preview continue during the intro and pause.
             if(live && source.TryTake(out var depth,out int w,out int h,out var pose))
             {
                 if(lastFrameAt<0) Debug.Log($"[Overhead] Live depth ready: {w} x {h}");
@@ -123,17 +131,30 @@ namespace Naispo.Overhead
             }
             if(live && (Time.unscaledTime-lastFrameAt>0.5f || !source.Running)) ready=false;
             if(!live)ready=true;
-            sounds.SetPaused(settingsOpen||paused||(!ready&&!Celebrating&&!garden.IsComplete));
-            // Depth capture and calibration continue while the game is paused.
+            sounds.SetPaused(settingsOpen||paused||(phase==GardenPhase.Playing&&!ready));
             if(settingsOpen||paused) { draggingGate=false;return; }
-            // The finished garden stays alive even when the player lowers their hands.
-            if(garden.IsComplete)
+
+            if(phase==GardenPhase.Intro)
+            {
+                introLanternTime+=dt;
+                // Button clicks and key presses share one request; the next Update consumes it.
+                if(startRequested) { StartPlay(); return; }
+                HandleIntroKeys(keyboard!=null&&keyboard.spaceKey.wasPressedThisFrame,
+                    keyboard!=null&&keyboard.enterKey.wasPressedThisFrame);
+                draggingGate=false;
+                return;
+            }
+
+            // Awakening and completion advance even when tracking is unavailable; explicit
+            // pause and settings have already returned above.
+            if(phase==GardenPhase.Awakening||phase==GardenPhase.Complete)
             {
                 draggingGate=false;
                 playTime+=dt;
                 UpdateFeedback(dt);
                 return;
             }
+
             if(!live)
             {
                 ready=true;
@@ -152,11 +173,10 @@ namespace Naispo.Overhead
                         targetAngle=Mathf.Clamp((mouse.x-PivotX)/5,-65,65);
                 }
             }
-            // A happy player may lower their hands during the party; finish its animation.
-            if(!ready&&!Celebrating) return;
+            if(!ready)return;
             playTime+=dt;
             UpdateFeedback(dt);
-            if(Celebrating||garden.IsComplete||!ready)return;
+            if(phase!=GardenPhase.Playing||!ready)return;
             float previousAngle=angle;
             angle=Mathf.Lerp(angle,targetAngle,1-Mathf.Exp(-10*dt));
             if(dropSchedule.Advance(dt,tokens.Count+deliveries.Count,out var drop))
@@ -228,6 +248,31 @@ namespace Naispo.Overhead
             draggingGate=false;angle=targetAngle=0;hasAngle=false;
             dropSchedule.Reset();ResetFeedback();
             leftMonster.Reset();rightMonster.Reset();
+            startRequested=false;phase=GardenPhase.Intro;
+        }
+        // Replay starts directly in play; configuration resets above stay on the intro card.
+        void RestartRound()
+        {
+            ResetRound();
+            phase=GardenPhase.Playing;
+        }
+        public bool RequestStart()
+        {
+            if(phase!=GardenPhase.Intro)return false;
+            startRequested=true;
+            return true;
+        }
+        void HandleIntroKeys(bool spacePressed,bool enterPressed)
+        {
+            if(phase!=GardenPhase.Intro)return;
+            if(spacePressed||enterPressed)startRequested=true;
+        }
+        void StartPlay()
+        {
+            if(phase!=GardenPhase.Intro)return;
+            // Starting never clears the tracking angle; the intro only holds the first frame.
+            startRequested=false;draggingGate=false;
+            phase=GardenPhase.Playing;
         }
         void Connect()
         {
@@ -251,10 +296,14 @@ namespace Naispo.Overhead
         {
             // The enchanted textures are Resources-owned; never destroy them here.
             DestroyMeadowArt();
+            DestroySpiritEmission();
             if(dot!=null)Destroy(dot);if(preview!=null)Destroy(preview);if(paper!=null)Destroy(paper);
-            if(warmPaper!=null)Destroy(warmPaper);if(glow!=null)Destroy(glow);
+            if(glow!=null)Destroy(glow);
             if(heartIcon!=null)Destroy(heartIcon);if(tangleIcon!=null)Destroy(tangleIcon);if(sparkleIcon!=null)Destroy(sparkleIcon);
             if(magicStarIcon!=null)Destroy(magicStarIcon);
+            if(sleepBubbleIcon!=null)Destroy(sleepBubbleIcon);
+            if(roomShade!=null)Destroy(roomShade);
+            if(roomWarm!=null)Destroy(roomWarm);
         }
     }
 

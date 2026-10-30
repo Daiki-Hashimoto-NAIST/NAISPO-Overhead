@@ -79,30 +79,6 @@ namespace Naispo.Overhead
             meadowTextures=null;
         }
 
-        void DrawMeadowColors()
-        {
-            if(meadowTextures==null)return;
-            Matrix4x4 originalMatrix=GUI.matrix;
-            Color originalColor=GUI.color;
-            try
-            {
-                int stages=Mathf.Min(garden.BloomCount,meadowTextures.Length);
-                for(int stage=0;stage<stages;stage++)
-                {
-                    float t=Mathf.Clamp01((playTime-garden.BloomStartedAt(stage))/2.1f);
-                    float fade=t*t*t*(t*(t*6-15)+10);
-                    if(fade<=0||meadowTextures[stage]==null)continue;
-                    GUI.color=new Color(1,1,1,fade);
-                    GUI.DrawTexture(MeadowRect,meadowTextures[stage],ScaleMode.StretchToFill,true);
-                }
-            }
-            finally
-            {
-                GUI.matrix=originalMatrix;
-                GUI.color=originalColor;
-            }
-        }
-
         static Texture2D CreateMeadowTexture(int stage,float[] farMask,float[] nearMask)
         {
             var pixels=new Color32[MeadowWidth*MeadowHeight];

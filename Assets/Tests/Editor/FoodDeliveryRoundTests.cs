@@ -23,6 +23,8 @@ namespace Naispo.Overhead.Tests
             Set(app,"source",host.AddComponent<OverheadDepthSource>());
             Set(app,"sounds",host.AddComponent<GameAudio>());
             Set(app,"playTime",100f);
+            // Update only moves and scores food while the round is playing.
+            Set(app,"phase",GardenPhase.Playing);
         }
 
         [TearDown]

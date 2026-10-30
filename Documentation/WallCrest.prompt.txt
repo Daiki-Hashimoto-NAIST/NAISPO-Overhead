@@ -1,0 +1,15 @@
+WallCrest.png
+Generated: 2026-10-30
+Method: built-in image_gen tool, transparent_background=true
+Asset: Assets/Resources/Enchanted/WallCrest.png
+Dimensions: 1536 x 1024, original RGBA preserved
+
+Purpose: replace the geometric tree with a painted celestial brass wall ornament.
+Only the final room reveal uses this image; delivery and scoring stay unchanged.
+
+Prompt:
+Use case: stylized-concept.
+Asset type: a finished transparent PNG environmental sprite for a children's fantasy game, a large ancient enchanted brass wall ornament revealed when the room lights come on.
+Create ONE coherent, beautifully hand-painted celestial wall crest, seen exactly from the front, isolated on a genuinely transparent background. A broad oval / softly pointed arch in aged warm brass, with a sculpted crescent moon at its upper crown, a few embedded tiny four-point stars and finely worked curling metal scrollwork at the shoulders and base. It should feel like an old magical observatory ornament that belongs on a dark teal wall inside a wooden moonlit conservatory. Painterly gouache / storybook fantasy illustration, believable softly weathered bronze and gold brushwork, softly rounded craftsmanship, welcoming and whimsical rather than occult or solemn. Muted antique gold, warm ivory highlights, very restrained oxidized teal recesses. Soft amber illumination within carved grooves, no large bloom.
+Composition: landscape 3:2 canvas, complete ornament comfortably inside edges with 6 percent transparent margin. Roughly symmetrical silhouette with subtle hand-crafted variation. Keep the central interior area empty and TRANSPARENT: an approximately 60%-width by 38%-height empty oval rectangular opening around the middle, because a game completion card may cover this area. Put the recognizable crescent and most beautiful details in the upper third and around the outside rim, with a small graceful finial at the bottom. The crest remains recognizable even with its center covered. Sparse, substantial designed forms; not a dense lattice or tiny scattering of objects.
+Render the object itself and subtle localized light only. No wall, no room, no background panel, no ground, no cast shadow rectangle, no black background, no checkerboard painted into image. No tree, no plants, no food, no red or blue gems, no characters, no faces, no letters, no numbers, no written runes, no logos, no text, no photorealistic product photograph. Avoid flat vector / basic geometric icon appearance. This must be a polished painterly game illustration matching warm brass lanterns against dark blue-green woodwork.
